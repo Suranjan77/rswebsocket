@@ -3,23 +3,18 @@ use rand::RngCore;
 use crate::ws_core;
 
 //todo: Extensions
-pub fn create_handshake(req_uri: String, host: String) {
+pub fn create_handshake(req_uri: String, host: String) -> String {
     let mut handshake: String = String::from("");
-    // line
     handshake.push_str("GET ");
     handshake.push_str(req_uri.as_str());
     handshake.push_str(" HTTP/1.1\n");
-
     handshake.push_str("Host: ");
     handshake.push_str(host.as_str());
     handshake.push('\n');
     handshake.push_str("Upgrade: websocket\nConnection: Upgrade\nSec-WebSocket-Version: 13\n");
-
-    // websocket key
     handshake.push_str("Sec-WebSocket-Key: ");
     handshake.push_str(sec_ws_key().as_str());
-
-    println!("{}", handshake);
+    handshake
 }
 
 fn sec_ws_key() -> String {
@@ -55,19 +50,13 @@ fn sec_ws_key() -> String {
 ///
 fn create_data_frame(payload: &str) -> Vec<u8> {
     let mut d_frame: Vec<u8> = vec![];
-
-    //fin,rsv1,rsv2,rsv3,opcode
     d_frame.push(0b10000001u8);
-
     d_frame.extend_from_slice(&encode_payload_length(payload.len()));
-
     let mask = masking_key();
     d_frame.extend_from_slice(&mask);
-
     payload.as_bytes().iter().enumerate().for_each(|(i, data)| {
         d_frame.push(*data ^ mask[i % 4]);
     });
-
     d_frame
 }
 
@@ -88,41 +77,31 @@ fn masking_key() -> [u8; 4] {
 /// remaining 8 bytes represent length of payload as 64-bit unsigned integer (u64/usize)
 fn encode_payload_length(length: usize) -> Vec<u8> {
     let mask_set = 0b10000000u8;
-
-    //mask, length (in bytes)
     if length < 126 {
-        // 8 bits to represent mask and length
-        // MSB is 1 to set mask and remaining 7 bits represent length of data
         let mask_with_len = (length as u8) | mask_set;
         vec![mask_with_len]
     } else if length <= 65535 {
-        // payload.len() <= (2^16) - 2
-
-        // 24 bits to represent mask and length
-        // First 8 bits: MSB represent mask and remaining 7 bits represent 126
         let mut d_vec = vec![126u8 | mask_set];
-
-        // Remaining 16 bit represent length of data
         d_vec.extend_from_slice(&(length as u16).to_be_bytes());
         d_vec
     } else {
-        // payload.len() >= (2^16) - 1
-
-        // 9 bytes used to represent mask and length
-        // First byte for mask and 127
         let mut d_vec = vec![127u8 | mask_set];
-
-        // Remaining 8 bytes to represent length
         d_vec.extend_from_slice(&length.to_be_bytes());
         d_vec
     }
 }
 
-fn send() {}
+fn send() {
+    todo!();
+}
 
-fn receive() {}
+fn receive() {
+    todo!();
+}
 
-fn close_connection() {}
+fn close_connection() {
+    todo!();
+}
 
 #[cfg(test)]
 mod tests {
