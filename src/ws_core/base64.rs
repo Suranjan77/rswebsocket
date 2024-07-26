@@ -57,21 +57,31 @@ pub fn decode(s: &str) -> String {
         }
     }
 
-    let mut decoded_str = String::from("");
+    let mut decoded = vec!();
 
     let mut window = 0;
     for _ in 0..bin_str.len() / 8 {
         let decoded_byte = u8::from_str_radix(&bin_str[window..window + 8], 2).unwrap();
         window += 8;
-        decoded_str.push(decoded_byte as char);
+        decoded.push(decoded_byte);
     }
 
-    decoded_str
+    String::from_utf8(decoded).unwrap()
 }
 
 #[cfg(test)]
 mod tests {
     use crate::ws_core::base64::{decode, encode};
+
+    #[test]
+    fn test_encode_sigma() {
+        assert_eq!(encode("Σ".as_bytes()), String::from("zqM="));
+    }
+
+    #[test]
+    fn test_decode_sigma() {
+        assert_eq!(decode("zqM="), String::from("Σ"));
+    }
 
     #[test]
     fn test_encode() {
