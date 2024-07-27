@@ -3,10 +3,18 @@ use std::fmt::Write;
 pub fn hash(msg: &str) -> String {
     let pad_msg = pad(msg.as_bytes());
 
-    let mut h = [0x67452301u32, 0xEFCDAB89u32, 0x98BADCFEu32, 0x10325476u32, 0xC3D2E1F0u32];
+    let mut h = [
+        0x67452301u32,
+        0xEFCDAB89u32,
+        0x98BADCFEu32,
+        0x10325476u32,
+        0xC3D2E1F0u32,
+    ];
     pad_msg.chunks(64).for_each(|block| {
         let mut w = [0u32; 80];
-        block.chunks(4).enumerate()
+        block
+            .chunks(4)
+            .enumerate()
             .for_each(|(t, d)| w[t] = u32::from_be_bytes(d.try_into().unwrap()));
 
         for t in 16..80 {
@@ -16,7 +24,8 @@ pub fn hash(msg: &str) -> String {
         let mut a = h;
 
         (0..80).for_each(|t| {
-            let tmp = cls(a[0], 5).wrapping_add(f(&a[1..=3], t))
+            let tmp = cls(a[0], 5)
+                .wrapping_add(f(&a[1..=3], t))
                 .wrapping_add(a[4])
                 .wrapping_add(w[t])
                 .wrapping_add(k(t));
@@ -45,7 +54,7 @@ fn f(a: &[u32], t: usize) -> u32 {
         0..=19 => (a[0] & a[1]) | ((!a[0]) & a[2]),
         20..=39 => a[0] ^ a[1] ^ a[2],
         40..=59 => (a[0] & a[1]) | (a[0] & a[2]) | (a[1] & a[2]),
-        _ => a[0] ^ a[1] ^ a[2]
+        _ => a[0] ^ a[1] ^ a[2],
     }
 }
 
@@ -54,7 +63,7 @@ fn k(t: usize) -> u32 {
         0..=19 => 0x5A827999u32,
         20..=39 => 0x6ED9EBA1u32,
         40..=59 => 0x8F1BBCDCu32,
-        _ => 0xCA62C1D6u32
+        _ => 0xCA62C1D6u32,
     }
 }
 
