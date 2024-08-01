@@ -6,15 +6,13 @@ use crate::ws_core::base64::decode;
 use crate::ws_core::ws_errors::{HTTPError, HTTPStatus};
 
 pub struct WSServer {
-    //todo Just for the sake of testing, remove this pub
-    //The key needs to be derived from client's handshake
-    pub key: String,
-    pub resource: String,
-    pub host: String,
-    pub origin: String,
-    pub sub_protocol: String,
-    pub extensions: Vec<String>,
-    pub version: u8,
+    key: String,
+    resource: String,
+    host: String,
+    origin: String,
+    sub_protocol: String,
+    extensions: Vec<String>,
+    version: u8,
 }
 
 impl Default for WSServer {
@@ -74,39 +72,52 @@ impl WSServer {
             .map(|d| {
                 let mut header = d.splitn(2, ":");
                 (
-                    header.next().unwrap().to_ascii_lowercase(),
-                    header.next().unwrap().to_string(),
+                    header.next().unwrap().trim().to_ascii_lowercase(),
+                    header.next().unwrap().trim().to_string(),
                 )
             })
             .filter(|(k, v)| !k.is_empty() && !v.is_empty())
             .collect();
 
-        validate_headers(&headers);
+        let _ = validate_headers(&headers);
 
         self.extract_headers_info(&headers);
 
         Ok(())
     }
 
-    pub fn extract_headers_info(&mut self, headers: &HashMap<String, String>) {
+    pub fn create_handshake_response(&self) -> Vec<u8> {
+        let mut res = vec![];
+        res.extend_from_slice("HTTP/1.1 101 Switching Protocols\n".as_bytes());
+        res.extend_from_slice("Upgrade: websocket\nConnection: Upgrade\n".as_bytes());
+        res.extend_from_slice("Sec-WebSocket-Accept: ".as_bytes());
+        res.extend_from_slice(self.create_accept_key().as_bytes());
+        res
+    }
+
+    fn extract_headers_info(&mut self, headers: &HashMap<String, String>) {
         self.host = headers.get("host").unwrap().to_string();
         self.version = headers
             .get("sec-websocket-version")
             .unwrap()
             .parse::<u8>()
             .unwrap();
-        self.sub_protocol = headers.get("sec-websocket-protocol").unwrap().to_string();
-        self.origin = headers.get("origin").unwrap().to_string();
+        self.sub_protocol = match headers.get("sec-websocket-protocol") {
+            Some(v) => v.to_string(),
+            None => String::from(""),
+        };
+        self.origin = match headers.get("origin") {
+            Some(v) => v.to_string(),
+            None => String::from(""),
+        };
         self.key = headers.get("sec-websocket-key").unwrap().to_string();
-        self.extensions = headers
-            .get("sec-websocket-extensions")
-            .unwrap()
-            .split(",")
-            .map(|s| s.trim().to_string())
-            .collect();
+        self.extensions = match headers.get("sec-websocket-extensions") {
+            Some(v) => v.split(",").map(|s| s.trim().to_string()).collect(),
+            None => vec![],
+        }
     }
 
-    pub fn create_accept_key(&self) -> String {
+    fn create_accept_key(&self) -> String {
         let hash_str = sha1::hash(&(self.key.clone() + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"));
         base64::encode(hash_str.as_slice())
     }
