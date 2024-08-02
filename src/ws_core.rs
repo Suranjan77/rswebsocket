@@ -1,3 +1,4 @@
 pub mod base64;
-mod connection_status;
+pub mod connection;
 pub mod sha1;
+pub mod ws_errors;

@@ -1,12 +1,20 @@
 use std::fmt::Write;
 
-pub fn hash(msg: &str) -> String {
+pub fn hash(msg: &str) -> Vec<u8> {
     let pad_msg = pad(msg.as_bytes());
 
-    let mut h = [0x67452301u32, 0xEFCDAB89u32, 0x98BADCFEu32, 0x10325476u32, 0xC3D2E1F0u32];
+    let mut h = [
+        0x67452301u32,
+        0xEFCDAB89u32,
+        0x98BADCFEu32,
+        0x10325476u32,
+        0xC3D2E1F0u32,
+    ];
     pad_msg.chunks(64).for_each(|block| {
         let mut w = [0u32; 80];
-        block.chunks(4).enumerate()
+        block
+            .chunks(4)
+            .enumerate()
             .for_each(|(t, d)| w[t] = u32::from_be_bytes(d.try_into().unwrap()));
 
         for t in 16..80 {
@@ -16,7 +24,8 @@ pub fn hash(msg: &str) -> String {
         let mut a = h;
 
         (0..80).for_each(|t| {
-            let tmp = cls(a[0], 5).wrapping_add(f(&a[1..=3], t))
+            let tmp = cls(a[0], 5)
+                .wrapping_add(f(&a[1..=3], t))
                 .wrapping_add(a[4])
                 .wrapping_add(w[t])
                 .wrapping_add(k(t));
@@ -34,10 +43,14 @@ pub fn hash(msg: &str) -> String {
         h[4] = h[4].wrapping_add(a[4]);
     });
 
-    h.iter().fold(String::new(), |mut out, b| {
-        let _ = write!(out, "{b:08x}");
-        out
-    })
+    let v = h.iter().fold(Vec::new(), |mut v, b| {
+        v.extend_from_slice(&(*b).to_be_bytes());
+        v
+    });
+
+    println!("{:?}", v);
+
+    v
 }
 
 fn f(a: &[u32], t: usize) -> u32 {
@@ -45,7 +58,7 @@ fn f(a: &[u32], t: usize) -> u32 {
         0..=19 => (a[0] & a[1]) | ((!a[0]) & a[2]),
         20..=39 => a[0] ^ a[1] ^ a[2],
         40..=59 => (a[0] & a[1]) | (a[0] & a[2]) | (a[1] & a[2]),
-        _ => a[0] ^ a[1] ^ a[2]
+        _ => a[0] ^ a[1] ^ a[2],
     }
 }
 
@@ -54,7 +67,7 @@ fn k(t: usize) -> u32 {
         0..=19 => 0x5A827999u32,
         20..=39 => 0x6ED9EBA1u32,
         40..=59 => 0x8F1BBCDCu32,
-        _ => 0xCA62C1D6u32
+        _ => 0xCA62C1D6u32,
     }
 }
 
@@ -63,8 +76,9 @@ fn pad(msg: &[u8]) -> Vec<u8> {
     pad_vec.extend_from_slice(msg);
     pad_vec.push(0x80u8);
 
-    let zero_count = 56 - (pad_vec.len() - (pad_vec.len() / 64) * 64);
-    pad_vec.extend_from_slice(&[0u8].repeat(zero_count));
+    while (pad_vec.len() + 8) % 64 != 0 {
+        pad_vec.push(0u8);
+    }
 
     pad_vec.extend_from_slice(&(msg.len() as u64 * 8).to_be_bytes());
 
@@ -82,42 +96,84 @@ mod tests {
     #[test]
     fn test_sha1_empty_string() {
         let result = hash("");
-        assert_eq!(result, "da39a3ee5e6b4b0d3255bfef95601890afd80709");
+        assert_eq!(
+            result,
+            vec!(
+                218, 57, 163, 238, 94, 107, 75, 13, 50, 85, 191, 239, 149, 96, 24, 144, 175, 216,
+                7, 9
+            )
+        );
     }
 
     #[test]
     fn test_sha1_abc() {
         let result = hash("abc");
-        assert_eq!(result, "a9993e364706816aba3e25717850c26c9cd0d89d");
+        assert_eq!(
+            result,
+            vec!(
+                169, 153, 62, 54, 71, 6, 129, 106, 186, 62, 37, 113, 120, 80, 194, 108, 156, 208,
+                216, 157
+            )
+        );
     }
 
     #[test]
     fn test_sha1_longer_message() {
         let result = hash("The quick brown fox jumps over the lazy dog");
-        assert_eq!(result, "2fd4e1c67a2d28fced849ee1bb76e7391b93eb12");
+        assert_eq!(
+            result,
+            vec!(
+                47, 212, 225, 198, 122, 45, 40, 252, 237, 132, 158, 225, 187, 118, 231, 57, 27,
+                147, 235, 18
+            )
+        );
     }
 
     #[test]
     fn test_sha1_longer_message_with_period() {
         let result = hash("The quick brown fox jumps over the lazy dog.");
-        assert_eq!(result, "408d94384216f890ff7a0c3528e8bed1e0b01621");
+        assert_eq!(
+            result,
+            vec!(
+                64, 141, 148, 56, 66, 22, 248, 144, 255, 122, 12, 53, 40, 232, 190, 209, 224, 176,
+                22, 33
+            )
+        );
     }
 
     #[test]
     fn test_sha1_repeated_characters() {
         let result = hash("aaaaaaaaaa");
-        assert_eq!(result, "3495ff69d34671d1e15b33a63c1379fdedd3a32a");
+        assert_eq!(
+            result,
+            vec!(
+                52, 149, 255, 105, 211, 70, 113, 209, 225, 91, 51, 166, 60, 19, 121, 253, 237, 211,
+                163, 42
+            )
+        );
     }
 
     #[test]
     fn test_sha1_alphanumeric_string() {
         let result = hash("1234567890abcdefghijklmnopqrstuvwxyz");
-        assert_eq!(result, "5471d5e4e91d0c0d87249d5873d7fcb5a141a582");
+        assert_eq!(
+            result,
+            vec!(
+                84, 113, 213, 228, 233, 29, 12, 13, 135, 36, 157, 88, 115, 215, 252, 181, 161, 65,
+                165, 130
+            )
+        );
     }
 
     #[test]
     fn test_sha1_non_ascii_characters() {
         let result = hash("こんにちは世界");
-        assert_eq!(result, "a4d9dd44b0951a008fa84865df14d5b6c6f7ecdb");
+        assert_eq!(
+            result,
+            vec!(
+                164, 217, 221, 68, 176, 149, 26, 0, 143, 168, 72, 101, 223, 20, 213, 182, 198, 247,
+                236, 219
+            )
+        );
     }
 }

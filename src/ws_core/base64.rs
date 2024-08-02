@@ -57,7 +57,7 @@ pub fn decode(s: &str) -> String {
         }
     }
 
-    let mut decoded = vec!();
+    let mut decoded = vec![];
 
     let mut window = 0;
     for _ in 0..bin_str.len() / 8 {
