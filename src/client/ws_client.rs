@@ -35,22 +35,20 @@ impl WSClient {
         handshake
     }
 
-    pub fn parse_server_handshake(&mut self, c_handshake: Vec<u8>) -> Result<(), &str> {
+    pub fn parse_server_handshake(&self, c_handshake: Vec<u8>) -> Result<(), String> {
         let h_lines: Vec<String> = c_handshake
             .lines()
             .map(|res| res.unwrap())
             .take_while(|l| !l.is_empty())
             .collect();
 
-        let headers: HashMap<String, String> = parse_headers(&h_lines);
-
         if h_lines.is_empty() {
-            return Err("Invalid handshake");
+            return Err("Invalid handshake".to_string());
         }
 
         let status: Vec<&str> = h_lines.first().unwrap().splitn(3, " ").collect();
         if status.len() != 3 {
-            return Err("Invalid status line");
+            return Err("Invalid status line".to_string());
         }
 
         let _ = match validate_http_version(status[0]) {
@@ -63,7 +61,11 @@ impl WSClient {
             _ => Ok(()),
         };
 
-        let _ = validate_headers(&headers);
+        let headers: HashMap<String, String> = parse_headers(&h_lines);
+
+        if let Err(e) = validate_headers(&headers) {
+            return Err(e.to_string());
+        }
 
         Ok(())
     }
@@ -78,7 +80,7 @@ fn sec_ws_key() -> String {
 fn validate_headers(headers: &HashMap<String, String>) -> Result<(), &str> {
     match headers.get("upgrade") {
         Some(upgrade) => {
-            if !upgrade.eq_ignore_ascii_case("upgrade") {
+            if !upgrade.eq_ignore_ascii_case("websocket") {
                 return Err("Invalid upgrade header");
             }
         }

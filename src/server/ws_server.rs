@@ -50,24 +50,24 @@ impl WSServer {
         let headers: HashMap<String, String> = parse_headers(&h_lines);
 
         if h_lines.is_empty() {
-            return Err(errors::get_bad_request("Invalid Request"));
+            return Err(get_bad_request("Invalid Request"));
         }
 
         let status: Vec<&str> = h_lines.first().unwrap().splitn(3, " ").collect();
         if status.len() != 3 {
-            return Err(errors::get_bad_request("Invalid HTTP Request"));
+            return Err(get_bad_request("Invalid HTTP Request"));
         }
 
         verify_http_method(status[0])?;
         verify_resource_uri(status[1])?;
         let _ = match validate_http_version(status[2]) {
             Ok(()) => Ok(()),
-            Err(e) => Err(errors::get_bad_request(e)),
+            Err(e) => Err(get_bad_request(e)),
         };
 
         self.resource = status[1].to_string();
 
-        let _ = validate_headers(&headers);
+        validate_headers(&headers)?;
 
         self.extract_headers_info(&headers);
 
@@ -114,60 +114,52 @@ impl WSServer {
 fn validate_headers(headers: &HashMap<String, String>) -> Result<(), HTTPError> {
     match headers.get("host") {
         Some(_) => (),
-        None => return Err(errors::get_bad_request("Invalid header <Host>")),
+        None => return Err(get_bad_request("Invalid header <Host>")),
     };
 
     match headers.get("upgrade") {
         Some(upgrade) => {
-            if !upgrade.eq_ignore_ascii_case("upgrade") {
-                return Err(errors::get_bad_request(
+            if !upgrade.eq_ignore_ascii_case("websocket") {
+                return Err(get_bad_request(
                     "Invalid header value upgrade <upgrade: websocket>",
                 ));
             }
         }
-        None => return Err(errors::get_bad_request("Invalid header <Upgrade>")),
+        None => return Err(get_bad_request("Invalid header <Upgrade>")),
     };
 
     match headers.get("connection") {
         Some(connection) => {
             if !connection.eq_ignore_ascii_case("upgrade") {
-                return Err(errors::get_bad_request(
+                return Err(get_bad_request(
                     "Invalid header value connection <connection: upgrade>",
                 ));
             }
         }
-        None => return Err(errors::get_bad_request("Invalid header <Connection>")),
+        None => return Err(get_bad_request("Invalid header <Connection>")),
     }
 
     match headers.get("sec-websocket-key") {
         Some(key) => {
             if decode(key).len() != 16 {
-                return Err(errors::get_bad_request(
+                return Err(get_bad_request(
                     "Invalid header value sec-websocket-key <sec-websocket-key: 16 random \
                     btyes base64 encoded>",
                 ));
             }
         }
-        None => {
-            return Err(errors::get_bad_request(
-                "Invalid header <sec-websocket-key>",
-            ))
-        }
+        None => return Err(get_bad_request("Invalid header <sec-websocket-key>")),
     }
 
     match headers.get("sec-websocket-version") {
         Some(version) => {
             if !version.eq("13") {
-                return Err(errors::get_bad_request(
+                return Err(get_bad_request(
                     "Version not supported <sec-websocket-version: 13>",
                 ));
             }
         }
-        None => {
-            return Err(errors::get_bad_request(
-                "Invalid header <sec-websocket-version>",
-            ))
-        }
+        None => return Err(get_bad_request("Invalid header <sec-websocket-version>")),
     }
 
     Ok(())
