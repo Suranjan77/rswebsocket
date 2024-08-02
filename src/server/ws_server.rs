@@ -1,9 +1,13 @@
 use std::collections::HashMap;
 use std::io::BufRead;
 
+use url::Url;
+
+use crate::server::errors;
+use crate::server::errors::{get_bad_request, HTTPError};
 use crate::ws_core::{base64, sha1};
 use crate::ws_core::base64::decode;
-use crate::ws_core::ws_errors::{HTTPError, HTTPStatus};
+use crate::ws_core::http_utils::{parse_headers, validate_http_version};
 
 pub struct WSServer {
     key: String,
@@ -43,41 +47,25 @@ impl WSServer {
             .take_while(|l| !l.is_empty())
             .collect();
 
+        let headers: HashMap<String, String> = parse_headers(&h_lines);
+
         if h_lines.is_empty() {
-            return Err(HTTPError {
-                message: "Invalid Request".to_string(),
-                code: 400,
-                status: HTTPStatus::BadRequest,
-            });
+            return Err(errors::get_bad_request("Invalid Request"));
         }
 
         let status: Vec<&str> = h_lines.first().unwrap().splitn(3, " ").collect();
         if status.len() != 3 {
-            return Err(HTTPError {
-                code: 400,
-                message: "Invalid HTTP Request".to_string(),
-                status: HTTPStatus::BadRequest,
-            });
+            return Err(errors::get_bad_request("Invalid HTTP Request"));
         }
 
-        verify_http_status(status[0])?;
+        verify_http_method(status[0])?;
         verify_resource_uri(status[1])?;
-        validate_http_version(status[2])?;
+        let _ = match validate_http_version(status[2]) {
+            Ok(()) => Ok(()),
+            Err(e) => Err(errors::get_bad_request(e)),
+        };
 
         self.resource = status[1].to_string();
-
-        let headers: HashMap<String, String> = h_lines
-            .iter()
-            .skip(1)
-            .map(|d| {
-                let mut header = d.splitn(2, ":");
-                (
-                    header.next().unwrap().trim().to_ascii_lowercase(),
-                    header.next().unwrap().trim().to_string(),
-                )
-            })
-            .filter(|(k, v)| !k.is_empty() && !v.is_empty())
-            .collect();
 
         let _ = validate_headers(&headers);
 
@@ -126,137 +114,75 @@ impl WSServer {
 fn validate_headers(headers: &HashMap<String, String>) -> Result<(), HTTPError> {
     match headers.get("host") {
         Some(_) => (),
-        None => {
-            return Err(HTTPError {
-                message: "Invalid header <Host>".to_string(),
-                code: 400,
-                status: HTTPStatus::BadRequest,
-            })
-        }
+        None => return Err(errors::get_bad_request("Invalid header <Host>")),
     };
 
     match headers.get("upgrade") {
         Some(upgrade) => {
             if !upgrade.eq_ignore_ascii_case("upgrade") {
-                return Err(HTTPError {
-                    message: "Invalid header value upgrade <upgrade: websocket>".to_string(),
-                    code: 400,
-                    status: HTTPStatus::BadRequest,
-                });
+                return Err(errors::get_bad_request(
+                    "Invalid header value upgrade <upgrade: websocket>",
+                ));
             }
         }
-        None => {
-            return Err(HTTPError {
-                message: "Invalid header <Upgrade>".to_string(),
-                code: 400,
-                status: HTTPStatus::BadRequest,
-            })
-        }
+        None => return Err(errors::get_bad_request("Invalid header <Upgrade>")),
     };
 
     match headers.get("connection") {
         Some(connection) => {
             if !connection.eq_ignore_ascii_case("upgrade") {
-                return Err(HTTPError {
-                    message: "Invalid header value connection <connection: upgrade>".to_string(),
-                    code: 400,
-                    status: HTTPStatus::BadRequest,
-                });
+                return Err(errors::get_bad_request(
+                    "Invalid header value connection <connection: upgrade>",
+                ));
             }
         }
-        None => {
-            return Err(HTTPError {
-                message: "Invalid header <Connection>".to_string(),
-                code: 400,
-                status: HTTPStatus::BadRequest,
-            })
-        }
+        None => return Err(errors::get_bad_request("Invalid header <Connection>")),
     }
 
     match headers.get("sec-websocket-key") {
         Some(key) => {
             if decode(key).len() != 16 {
-                return Err(HTTPError {
-                    message:
-                        "Invalid header value sec-websocket-key <sec-websocket-key: 16 random \
-                    btyes base64 encoded>"
-                            .to_string(),
-                    code: 400,
-                    status: HTTPStatus::BadRequest,
-                });
+                return Err(errors::get_bad_request(
+                    "Invalid header value sec-websocket-key <sec-websocket-key: 16 random \
+                    btyes base64 encoded>",
+                ));
             }
         }
         None => {
-            return Err(HTTPError {
-                message: "Invalid header <sec-websocket-key>".to_string(),
-                code: 400,
-                status: HTTPStatus::BadRequest,
-            })
+            return Err(errors::get_bad_request(
+                "Invalid header <sec-websocket-key>",
+            ))
         }
     }
 
     match headers.get("sec-websocket-version") {
         Some(version) => {
             if !version.eq("13") {
-                return Err(HTTPError {
-                    message: "Version not supported <sec-websocket-version: 13>".to_string(),
-                    code: 400,
-                    status: HTTPStatus::BadRequest,
-                });
+                return Err(errors::get_bad_request(
+                    "Version not supported <sec-websocket-version: 13>",
+                ));
             }
         }
         None => {
-            return Err(HTTPError {
-                message: "Invalid header <sec-websocket-version>".to_string(),
-                code: 400,
-                status: HTTPStatus::BadRequest,
-            })
+            return Err(errors::get_bad_request(
+                "Invalid header <sec-websocket-version>",
+            ))
         }
     }
 
     Ok(())
 }
 
-fn validate_http_version(p0: &str) -> Result<(), HTTPError> {
-    match p0.splitn(2, "/").last() {
-        Some(v) => match v.parse::<f32>() {
-            Ok(version) => {
-                if version < 1.1 {
-                    Err(HTTPError {
-                        message: "Invalid HTTP version".to_string(),
-                        code: 400,
-                        status: HTTPStatus::BadRequest,
-                    })
-                } else {
-                    Ok(())
-                }
-            }
-            Err(_) => Err(HTTPError {
-                message: "Invalid HTTP version".to_string(),
-                code: 400,
-                status: HTTPStatus::BadRequest,
-            }),
-        },
-        None => Err(HTTPError {
-            message: "Invalid Request".to_string(),
-            code: 400,
-            status: HTTPStatus::BadRequest,
-        }),
+fn verify_resource_uri(p0: &str) -> Result<(), HTTPError> {
+    match Url::parse(p0) {
+        Ok(_) => Ok(()),
+        Err(_) => Err(get_bad_request("Malformed resource uri")),
     }
 }
 
-//todo
-fn verify_resource_uri(p0: &str) -> Result<(), HTTPError> {
-    Ok(())
-}
-
-fn verify_http_status(p0: &str) -> Result<(), HTTPError> {
+fn verify_http_method(p0: &str) -> Result<(), HTTPError> {
     match p0 {
         "GET" => Ok(()),
-        _ => Err(HTTPError {
-            code: 405,
-            message: "Method Not Allowed".to_string(),
-            status: HTTPStatus::MethodNotAllowed,
-        }),
+        _ => Err(errors::get_not_allowed("Method Not Allowed")),
     }
 }

@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
+    use crate::server::errors::HTTPStatus;
     use crate::server::ws_server::WSServer;
-    use crate::ws_core::ws_errors::HTTPStatus;
 
     #[test]
     fn test_ws_handshake() {

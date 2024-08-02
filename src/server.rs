@@ -1,2 +1,3 @@
+pub mod errors;
 mod server_tests;
-mod ws_server;
+pub mod ws_server;

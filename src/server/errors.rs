@@ -24,3 +24,19 @@ impl fmt::Display for HTTPError {
         )
     }
 }
+
+pub fn get_bad_request(msg: &str) -> HTTPError {
+    HTTPError {
+        message: msg.to_string(),
+        code: 400,
+        status: HTTPStatus::BadRequest,
+    }
+}
+
+pub fn get_not_allowed(msg: &str) -> HTTPError {
+    HTTPError {
+        message: msg.to_string(),
+        code: 405,
+        status: HTTPStatus::MethodNotAllowed,
+    }
+}
