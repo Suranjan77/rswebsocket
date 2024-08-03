@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
+    use crate::server::errors::HTTPStatus;
     use crate::server::ws_server::WSServer;
-    use crate::ws_core::ws_errors::HTTPStatus;
 
     #[test]
     fn test_ws_handshake() {
@@ -95,7 +95,7 @@ mod tests {
 
     #[test]
     fn test_ws_wrong_http_method() {
-        let handshake = "GET ws://echo.websocket.org/ HTTP/1.1\n\
+        let handshake = "POST ws://echo.websocket.org/ HTTP/1.1\n\
                 Host: echo.websocket.org\n\
                 Connection: Upgrade\n\
                 Pragma: no-cache\n\
