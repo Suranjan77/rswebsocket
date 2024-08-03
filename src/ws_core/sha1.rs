@@ -46,8 +46,6 @@ pub fn hash(msg: &str) -> Vec<u8> {
         v
     });
 
-    println!("{:?}", v);
-
     v
 }
 
