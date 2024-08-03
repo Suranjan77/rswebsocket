@@ -5,9 +5,9 @@ use url::Url;
 
 use crate::server::errors;
 use crate::server::errors::{get_bad_request, HTTPError};
-use crate::ws_core::{base64, sha1};
 use crate::ws_core::base64::decode;
 use crate::ws_core::http_utils::{parse_headers, validate_http_version};
+use crate::ws_core::{base64, sha1};
 
 pub struct WSServer {
     key: String,

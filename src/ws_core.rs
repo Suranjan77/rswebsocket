@@ -3,3 +3,4 @@ pub mod connection;
 pub mod data_frame;
 pub mod http_utils;
 pub mod sha1;
+mod tests;
