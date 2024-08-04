@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use crate::ws_core::data_frame::{Agent, DataFrame, FrameType};
+    use crate::ws_core::data_frame_tx::{Agent, DataFrame, FrameType};
 
     #[test]
     fn test_df_1() {
@@ -94,6 +94,7 @@ mod tests {
         });
         assert_eq!(expected, d_frame);
     }
+
     #[test]
     fn test_server_close_df() {
         let data = "Close for no reason"; //19
@@ -105,6 +106,17 @@ mod tests {
             0x88u8, 0x13, 0x43, 0x6c, 0x6f, 0x73, 0x65, 0x20, 0x66, 0x6f, 0x72, 0x20, 0x6e, 0x6f,
             0x20, 0x72, 0x65, 0x61, 0x73, 0x6f, 0x6e,
         ];
+        assert_eq!(expected, d_frame);
+    }
+
+    #[test]
+    fn test_server_close_with_no_msg() {
+        let data = ""; //19
+        let mut df = DataFrame::new(Agent::Server);
+        df.build(data, FrameType::Close).unwrap();
+        let d_frame = Vec::from(df);
+        assert_eq!(d_frame.len(), 2);
+        let expected = vec![0x88u8, 0];
         assert_eq!(expected, d_frame);
     }
 
