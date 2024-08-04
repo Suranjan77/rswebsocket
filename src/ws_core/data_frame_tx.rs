@@ -52,12 +52,17 @@ impl From<DataFrame> for Vec<u8> {
                 | ((df.rsv3 as u8) << 4))
                 | df.op_code,
         );
-        d_frame.push(((df.mask as u8) << 7) | df.len_indicator);
-        d_frame.extend(df.payload_len);
-        if df.mask {
-            d_frame.extend_from_slice(&df.mask_key);
+
+        let masked_len = ((df.mask as u8) << 7) | df.len_indicator;
+        d_frame.push(masked_len);
+        if masked_len != 0 {
+            d_frame.extend(df.payload_len);
+            if df.mask {
+                d_frame.extend_from_slice(&df.mask_key);
+            }
+            d_frame.extend(df.payload);
         }
-        d_frame.extend(df.payload);
+
         d_frame
     }
 }
