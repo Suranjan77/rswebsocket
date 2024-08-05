@@ -1,9 +1,9 @@
 use crate::ws_core::data_frame_tx::{Agent, FrameType};
 
 pub trait WSHandler {
-    fn handle_text_msg(msg: String);
-    fn handle_bin_msg(msg: Vec<u8>);
-    fn handle_control(ctrl_msg: String, f_type: FrameType);
+    fn handle_text_msg(&self, msg: String);
+    fn handle_bin_msg(&self, msg: Vec<u8>);
+    fn handle_control(&self, ctrl_msg: String, f_type: FrameType);
 }
 
 impl TryFrom<u8> for FrameType {
@@ -39,24 +39,25 @@ where
 
     /// Caller needs to create new `buffer` of Vec<u8> and read the stream till the *EOF*
     /// into the `buffer`
-    pub fn parse(&self, buf: &Vec<u8>) -> Result<(), String> {
+    pub fn parse(&self, buf: &[u8]) -> Result<(), String> {
         if buf.len() < 3 {
-            return Err("Minimum frame length is 3 bytes".to_string());
+            return Err("Minimum frame length is 2 bytes".to_string());
         }
 
-        if buf.first().unwrap() & 0xF0 == 0x80 {
+        if buf.first().unwrap() & 0xF0 != 0x80 {
             return Err(
                 "Fin bit unset or rsv1-3 set, this impl assumes no fragmentation and rsv1-3 unset"
                     .to_string(),
             );
         }
 
-        let f_type: FrameType = match (buf.get(1).unwrap() & 0xF).try_into() {
+        let op_code = buf.first().unwrap() & 0xF;
+        let f_type: FrameType = match op_code.try_into() {
             Ok(f) => f,
             Err(e) => return Err(e.to_string()),
         };
 
-        if let Some(m_len) = buf.get(3) {
+        if let Some(m_len) = buf.get(1) {
             match self.agent {
                 Agent::Client => {
                     if m_len & 0x80 != 0x80 {
@@ -75,28 +76,29 @@ where
             match f_type {
                 FrameType::Continuation | FrameType::Text | FrameType::Binary => (),
                 FrameType::Close | FrameType::Ping | FrameType::Pong => {
-                    if m_len % 0x7F > 125 {
+                    if m_len & 0x7F > 125 {
                         return Err("Control frame length exceeds 125 bytes".to_string());
                     }
                 }
             }
 
-            let mut mask_idx = 4usize;
+            let mut mask_idx = 2usize;
 
             // finds actual payload length based on the 3rd byte
             let payload_len = match m_len & 0x7F {
                 ..126 => (m_len & 0x7F) as usize,
-                126 => match buf.get(4..=5) {
+                126 => match buf.get(2..=3) {
                     Some(l) => {
-                        mask_idx = 6;
-                        usize::from_be_bytes(l.try_into().unwrap())
+                        mask_idx = 4;
+                        let cl = u16::from_be_bytes(l.try_into().unwrap());
+                        cl as usize
                     }
                     None => return Err("Invalid payload, missing payload length".to_string()),
                 },
-                _ => match buf.get(4..12) {
+                _ => match buf.get(2..10) {
                     None => return Err("Invalid payload, missing payload length".to_string()),
                     Some(l) => {
-                        mask_idx = 12;
+                        mask_idx = 10;
                         usize::from_be_bytes(l.try_into().unwrap())
                     }
                 },
@@ -104,7 +106,7 @@ where
 
             let payload: Vec<u8> = match self.agent {
                 Agent::Client => match buf.get(mask_idx..mask_idx + 4) {
-                    Some(m) => match buf.get(mask_idx + 4..payload_len) {
+                    Some(m) => match buf.get(mask_idx + 4..payload_len + mask_idx + 4) {
                         Some(l) => l
                             .iter()
                             .enumerate()
@@ -121,13 +123,13 @@ where
             };
 
             match f_type {
-                FrameType::Continuation | FrameType::Text => {
-                    H::handle_text_msg(String::from_utf8(payload).unwrap())
-                }
-                FrameType::Binary => H::handle_bin_msg(payload),
-                FrameType::Close | FrameType::Ping | FrameType::Pong => {
-                    H::handle_control(String::from_utf8(payload).unwrap(), f_type)
-                }
+                FrameType::Continuation | FrameType::Text => self
+                    .handler
+                    .handle_text_msg(String::from_utf8(payload).unwrap()),
+                FrameType::Binary => self.handler.handle_bin_msg(payload),
+                FrameType::Close | FrameType::Ping | FrameType::Pong => self
+                    .handler
+                    .handle_control(String::from_utf8(payload).unwrap(), f_type),
             }
         } else {
             return Err("Invalid dataframe, missing payload length".to_string());
