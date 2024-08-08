@@ -1,13 +1,13 @@
 #[cfg(test)]
 mod tests {
-    use crate::ws_core::data_frame_rx::{DFParser, WSHandler};
+    use crate::ws_core::data_frame_rx::DFParser;
     use crate::ws_core::data_frame_tx::{Agent, DataFrame, FrameType};
+    use crate::ws_core::ws::WSHandler;
 
     #[test]
     fn test_df_1() {
         let data = "Hello";
-        let mut df = DataFrame::new(Agent::Client);
-        df.build(data, FrameType::Text).unwrap();
+        let df = DataFrame::build(data.as_bytes(), FrameType::Text, Agent::Client).unwrap();
         let d_frame = Vec::from(df);
         assert_eq!(d_frame.len(), 11);
         let mut expected = vec![0x81u8, 0x85];
@@ -22,8 +22,7 @@ mod tests {
     #[test]
     fn test_df_2() {
         let data = "Hello World";
-        let mut df = DataFrame::new(Agent::Client);
-        df.build(data, FrameType::Text).unwrap();
+        let df = DataFrame::build(data.as_bytes(), FrameType::Text, Agent::Client).unwrap();
         let d_frame = Vec::from(df);
         assert_eq!(d_frame.len(), 17);
         let mut expected = vec![0x81u8, 0x8B];
@@ -40,8 +39,7 @@ mod tests {
         let data = "The quick brown fox jumps over the lazy dog. This pangram contains \
             every letter of the English alphabet. It's often used for font displays and testing \
             character recognition.";
-        let mut df = DataFrame::new(Agent::Client);
-        df.build(data, FrameType::Text).unwrap();
+        let df = DataFrame::build(data.as_bytes(), FrameType::Text, Agent::Client).unwrap();
         let d_frame = Vec::from(df);
         assert_eq!(d_frame.len(), 181);
         let mut expected = vec![0x81u8, 0xFE, 0x00, 0xAD];
@@ -58,8 +56,7 @@ mod tests {
         let data = "The quick brown fox jumps over the lazy dog. This pangram contains \
             every letter of the English alphabet. It's often used for font displays and testing \
             character recognition.";
-        let mut df = DataFrame::new(Agent::Client);
-        df.build(data, FrameType::Binary).unwrap();
+        let df = DataFrame::build(data.as_bytes(), FrameType::Binary, Agent::Client).unwrap();
         let d_frame = Vec::from(df);
         assert_eq!(d_frame.len(), 181);
         let mut expected = vec![0x82u8, 0xFE, 0x00, 0xAD];
@@ -80,8 +77,7 @@ mod tests {
         let data = "The quick brown fox jumps over the lazy dog. This pangram contains \
             every letter of the English alphabet. It's often used for font displays and testing \
             character recognition.";
-        let mut df = DataFrame::new(Agent::Server);
-        df.build(data, FrameType::Text).unwrap();
+        let df = DataFrame::build(data.as_bytes(), FrameType::Text, Agent::Server).unwrap();
         let d_frame = Vec::from(df);
         assert_eq!(d_frame.len(), 177);
         let expected = vec![
@@ -105,8 +101,7 @@ mod tests {
     #[test]
     fn test_client_close_df() {
         let data = "Close for no reason"; //19
-        let mut df = DataFrame::new(Agent::Client);
-        df.build(data, FrameType::Close).unwrap();
+        let df = DataFrame::build(data.as_bytes(), FrameType::Close, Agent::Client).unwrap();
         let d_frame = Vec::from(df);
         assert_eq!(d_frame.len(), 25);
         let mut expected = vec![0x88u8, 0x93];
@@ -121,8 +116,7 @@ mod tests {
     #[test]
     fn test_server_close_df() {
         let data = "Close for no reason"; //19
-        let mut df = DataFrame::new(Agent::Server);
-        df.build(data, FrameType::Close).unwrap();
+        let df = DataFrame::build(data.as_bytes(), FrameType::Close, Agent::Server).unwrap();
         let d_frame = Vec::from(df);
         assert_eq!(d_frame.len(), 21);
         let expected = vec![
@@ -135,8 +129,7 @@ mod tests {
     #[test]
     fn test_server_close_with_no_msg() {
         let data = ""; //19
-        let mut df = DataFrame::new(Agent::Server);
-        df.build(data, FrameType::Close).unwrap();
+        let mut df = DataFrame::build(data.as_bytes(), FrameType::Close, Agent::Server).unwrap();
         let d_frame = Vec::from(df);
         assert_eq!(d_frame.len(), 2);
         let expected = vec![0x88u8, 0];
@@ -148,8 +141,7 @@ mod tests {
         let data = "The quick brown fox jumps over the lazy dog. This pangram contains \
             every letter of the English alphabet. It's often used for font displays and testing \
             character recognition.";
-        let mut df = DataFrame::new(Agent::Client);
-        assert!(df.build(data, FrameType::Ping).is_err());
+        assert!(DataFrame::build(data.as_bytes(), FrameType::Ping, Agent::Client).is_err());
     }
 
     struct TestWSHandler {
@@ -157,9 +149,14 @@ mod tests {
         text_msg: String,
         bin_msg: Vec<u8>,
         f_type: FrameType,
+        agent: Agent,
     }
 
     impl WSHandler for TestWSHandler {
+        fn who(&self) -> Agent {
+            self.agent
+        }
+
         fn handle_text_msg(&self, msg: String) {
             assert_eq!(msg, self.text_msg);
         }
@@ -198,15 +195,14 @@ mod tests {
                 0x74, 0x69, 0x6F, 0x6E, 0x2E,
             ],
             f_type: FrameType::Close,
+            agent: Agent::Client,
         };
-
-        let parser = DFParser::<TestWSHandler>::new(Agent::Client, handler);
 
         let close_df = vec![
             0x88, 0x93, 0xC6, 0x53, 0x81, 0xC1, 0x85, 0x3F, 0xEE, 0xB2, 0xA3, 0x73, 0xE7, 0xAE,
             0xB4, 0x73, 0xEF, 0xAE, 0xE6, 0x21, 0xE4, 0xA0, 0xB5, 0x3C, 0xEF,
         ];
-        parser.parse(&close_df).unwrap();
+        DFParser::parse(&close_df, handler.who()).unwrap();
 
         let text_msg_df = vec![
             0x81u8, 0xFE, 0x00, 0xAD, 0x9B, 0x26, 0x0A, 0x86, 0xCF, 0x4E, 0x6F, 0xA6, 0xEA, 0x53,
@@ -223,7 +219,7 @@ mod tests {
             0x7E, 0xEF, 0xF5, 0x41, 0x2A, 0xE5, 0xF3, 0x47, 0x78, 0xE7, 0xF8, 0x52, 0x6F, 0xF4,
             0xBB, 0x54, 0x6F, 0xE5, 0xF4, 0x41, 0x64, 0xEF, 0xEF, 0x4F, 0x65, 0xE8, 0xB5,
         ];
-        parser.parse(&text_msg_df).unwrap();
+        DFParser::parse(&text_msg_df, handler.who()).unwrap();
 
         let binary_msg_df = vec![
             0x82, 0xFE, 0x00, 0xAD, 0xAF, 0x1B, 0xFE, 0xC2, 0xFB, 0x73, 0x9B, 0xE2, 0xDE, 0x6E,
@@ -240,6 +236,6 @@ mod tests {
             0x8A, 0xAB, 0xC1, 0x7C, 0xDE, 0xA1, 0xC7, 0x7A, 0x8C, 0xA3, 0xCC, 0x6F, 0x9B, 0xB0,
             0x8F, 0x69, 0x9B, 0xA1, 0xC0, 0x7C, 0x90, 0xAB, 0xDB, 0x72, 0x91, 0xAC, 0x81,
         ];
-        parser.parse(&binary_msg_df).unwrap()
+        DFParser::parse(&binary_msg_df, handler.who()).unwrap();
     }
 }

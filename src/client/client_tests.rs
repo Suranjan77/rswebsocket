@@ -2,15 +2,11 @@
 mod tests {
     use crate::client::ws_client::WSClient;
     use crate::ws_core::http_utils::parse_headers;
-
-    #[test]
-    fn test_invalid_host_url() {
-        assert!(WSClient::new("w/sss").is_err());
-    }
+    use url::Url;
 
     #[test]
     fn test_valid_handshake() {
-        let ws_client = WSClient::new("wss://www.example.com/chat/").unwrap();
+        let ws_client = WSClient::new(Url::parse("wss://www.example.com/chat/").unwrap()).unwrap();
 
         let handshake = ws_client.create_handshake();
 
@@ -44,10 +40,10 @@ mod tests {
         Connection: Upgrade\n\
         Sec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=";
 
-        let ws_client = WSClient::new("wss://www.example.com/chat/").unwrap();
+        let ws_client = WSClient::new(Url::parse("wss://www.example.com/chat/").unwrap()).unwrap();
 
         ws_client
-            .parse_server_handshake(server_handshake.as_bytes().to_vec())
+            .parse_handshake(server_handshake.as_bytes().to_vec())
             .unwrap();
     }
 
@@ -57,10 +53,10 @@ mod tests {
         Connection: Upgrade\n\
         Sec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=";
 
-        let ws_client = WSClient::new("wss://www.example.com/chat/").unwrap();
+        let ws_client = WSClient::new(Url::parse("wss://www.example.com/chat/").unwrap()).unwrap();
 
         assert!(ws_client
-            .parse_server_handshake(server_handshake.as_bytes().to_vec())
+            .parse_handshake(server_handshake.as_bytes().to_vec())
             .is_err());
     }
 }

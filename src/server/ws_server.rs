@@ -40,7 +40,7 @@ impl WSServer {
         }
     }
 
-    pub fn parse_client_handshake(&mut self, c_handshake: Vec<u8>) -> Result<(), HTTPError> {
+    pub fn parse_handshake(&mut self, c_handshake: Vec<u8>) -> Result<(), HTTPError> {
         let h_lines: Vec<String> = c_handshake
             .lines()
             .map(|res| res.unwrap())
@@ -74,7 +74,7 @@ impl WSServer {
         Ok(())
     }
 
-    pub fn create_handshake_response(&self) -> Vec<u8> {
+    pub fn create_handshake(&self) -> Vec<u8> {
         let mut res = vec![];
         res.extend_from_slice("HTTP/1.1 101 Switching Protocols\n".as_bytes());
         res.extend_from_slice("Upgrade: websocket\nConnection: Upgrade\n".as_bytes());

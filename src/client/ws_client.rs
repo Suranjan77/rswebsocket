@@ -12,13 +12,8 @@ pub struct WSClient {
 }
 
 impl WSClient {
-    pub fn new(req_uri: &str) -> Result<Self, &str> {
-        let host_uri = match Url::parse(req_uri) {
-            Ok(uri) => uri,
-            Err(_) => return Err("Invalid host url"),
-        };
-
-        Ok(WSClient { req_uri: host_uri })
+    pub fn new(req_uri: Url) -> Result<Self, String> {
+        Ok(WSClient { req_uri })
     }
 
     pub fn create_handshake(&self) -> String {
@@ -35,7 +30,7 @@ impl WSClient {
         handshake
     }
 
-    pub fn parse_server_handshake(&self, c_handshake: Vec<u8>) -> Result<(), String> {
+    pub fn parse_handshake(&self, c_handshake: Vec<u8>) -> Result<(), String> {
         let h_lines: Vec<String> = c_handshake
             .lines()
             .map(|res| res.unwrap())

@@ -25,10 +25,10 @@ mod tests {
 
         let mut ws_server = WSServer::new();
         ws_server
-            .parse_client_handshake(handshake.as_bytes().to_vec())
+            .parse_handshake(handshake.as_bytes().to_vec())
             .unwrap();
 
-        let res_handshake = ws_server.create_handshake_response();
+        let res_handshake = ws_server.create_handshake();
 
         let actual_handskhake = String::from_utf8(res_handshake)
             .unwrap()
@@ -118,7 +118,7 @@ mod tests {
         http_code: u16,
         status: HTTPStatus,
     ) {
-        match ws_server.parse_client_handshake(handshake.as_bytes().to_vec()) {
+        match ws_server.parse_handshake(handshake.as_bytes().to_vec()) {
             Ok(()) => (),
             Err(e) => {
                 assert_eq!(e.code, http_code);
