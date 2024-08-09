@@ -23,7 +23,7 @@ impl FrameType {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Eq, PartialEq)]
 pub enum Agent {
     Server,
     Client,

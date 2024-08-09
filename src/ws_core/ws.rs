@@ -12,14 +12,12 @@ pub trait WSHandler {
     fn who(&self) -> Agent;
     fn handle_text_msg(&self, msg: String);
     fn handle_bin_msg(&self, msg: Vec<u8>);
-    fn handle_control(&self, ctrl_msg: String, f_type: FrameType);
 }
 
 #[derive(Eq, PartialEq)]
 enum ConnectionStatus {
     Connecting,
     Open,
-    Closing,
     Closed,
 }
 
@@ -36,7 +34,7 @@ impl<H> WSStream<H>
 where
     H: WSHandler,
 {
-    pub fn connect(&mut self, host: &str, handler: H) -> Result<WSStream<H>, String> {
+    pub fn connect(host: &str, handler: H) -> Result<WSStream<H>, String> {
         let host_uri = match Url::parse(host) {
             Ok(uri) => uri,
             Err(_) => return Err("Invalid host url".to_string()),
@@ -50,15 +48,15 @@ where
             }
         };
 
-        let ws_stream = WSStream {
+        let mut ws_stream = WSStream {
             ws_state: ConnectionStatus::Connecting,
             stream: tcp_stream,
             handler,
-            client: WSClient::new(host_uri).unwrap(),
+            client: WSClient::new(host_uri)?,
             server: WSServer::new(),
         };
 
-        match self.handshake() {
+        match handshake(&mut ws_stream) {
             Ok(_) => Ok(ws_stream),
             Err(e) => Err(e),
         }
@@ -107,12 +105,10 @@ where
                         return Err("Invalid utf8 string payload".to_string());
                     }
                 };
-                
+
                 if payload.f_type == FrameType::Ping {
                     self.write(msg.as_bytes(), FrameType::Pong)?;
                 }
-
-                self.handler.handle_control(msg, payload.f_type);
             }
         };
 
@@ -126,7 +122,7 @@ where
         };
 
         if self.ws_state == ConnectionStatus::Open {
-            match self.stream.write(&Vec::from(df)) {
+            match self.stream.write_all(&Vec::from(df)) {
                 Ok(_) => Ok(()),
                 Err(e) => {
                     self.ws_state = ConnectionStatus::Closed;
@@ -147,68 +143,70 @@ where
         };
         Ok(())
     }
+}
+fn handshake<H>(ws_stream: &mut WSStream<H>) -> Result<(), String>
+where
+    H: WSHandler,
+{
+    match ws_stream.handler.who() {
+        Agent::Client => {
+            let handshake = ws_stream.client.create_handshake();
 
-    fn handshake(&mut self) -> Result<(), String> {
-        match self.handler.who() {
-            Agent::Client => {
-                let handshake = self.client.create_handshake();
-
-                match self.stream.write(handshake.as_bytes()) {
-                    Ok(s) => println!("{} bytes written", s),
-                    Err(e) => {
-                        println!("Failed to write handshake: {:?}", e);
-                        return Err("Handshake failed".to_string());
-                    }
-                };
-
-                let mut res_handshake = vec![];
-                match self.stream.read_to_end(&mut res_handshake) {
-                    Ok(s) => println!("{} bytes read", s),
-                    Err(e) => {
-                        println!("Failed to read handshake: {:?}", e);
-                        return Err("Handshake failed".to_string());
-                    }
-                };
-
-                match self.client.parse_handshake(res_handshake) {
-                    Ok(_) => self.ws_state = ConnectionStatus::Open,
-                    Err(e) => {
-                        self.ws_state = ConnectionStatus::Closed;
-                        return Err(e);
-                    }
+            match ws_stream.stream.write(handshake.as_bytes()) {
+                Ok(s) => println!("{} bytes written", s),
+                Err(e) => {
+                    println!("Failed to write handshake: {:?}", e);
+                    return Err("Handshake failed".to_string());
                 }
-            }
-            Agent::Server => {
-                let handshake = self.server.create_handshake();
+            };
 
-                match self.stream.write(&handshake) {
-                    Ok(s) => println!("{} bytes written", s),
-                    Err(e) => {
-                        println!("Failed to write handshake: {:?}", e);
-                        return Err("Handshake failed".to_string());
-                    }
-                };
+            let mut res_handshake = vec![];
+            match ws_stream.stream.read_to_end(&mut res_handshake) {
+                Ok(s) => println!("{} bytes read", s),
+                Err(e) => {
+                    println!("Failed to read handshake: {:?}", e);
+                    return Err("Handshake failed".to_string());
+                }
+            };
 
-                let mut res_handshake = vec![];
-                match self.stream.read_to_end(&mut res_handshake) {
-                    Ok(s) => println!("{} bytes read", s),
-                    Err(e) => {
-                        println!("Failed to read handshake: {:?}", e);
-                        return Err("Handshake failed".to_string());
-                    }
-                };
-
-                match self.server.parse_handshake(res_handshake) {
-                    Ok(_) => self.ws_state = ConnectionStatus::Open,
-                    Err(e) => {
-                        self.ws_state = ConnectionStatus::Closed;
-                        println!("HttpError {:?}", e);
-                        return Err(e.message);
-                    }
+            match ws_stream.client.parse_handshake(res_handshake) {
+                Ok(_) => ws_stream.ws_state = ConnectionStatus::Open,
+                Err(e) => {
+                    ws_stream.ws_state = ConnectionStatus::Closed;
+                    return Err(e);
                 }
             }
         }
+        Agent::Server => {
+            let handshake = ws_stream.server.create_handshake();
 
-        Ok(())
+            match ws_stream.stream.write(&handshake) {
+                Ok(s) => println!("{} bytes written", s),
+                Err(e) => {
+                    println!("Failed to write handshake: {:?}", e);
+                    return Err("Handshake failed".to_string());
+                }
+            };
+
+            let mut res_handshake = vec![];
+            match ws_stream.stream.read_to_end(&mut res_handshake) {
+                Ok(s) => println!("{} bytes read", s),
+                Err(e) => {
+                    println!("Failed to read handshake: {:?}", e);
+                    return Err("Handshake failed".to_string());
+                }
+            };
+
+            match ws_stream.server.parse_handshake(res_handshake) {
+                Ok(_) => ws_stream.ws_state = ConnectionStatus::Open,
+                Err(e) => {
+                    ws_stream.ws_state = ConnectionStatus::Closed;
+                    println!("HttpError {:?}", e);
+                    return Err(e.message);
+                }
+            }
+        }
     }
+
+    Ok(())
 }

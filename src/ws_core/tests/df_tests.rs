@@ -129,7 +129,7 @@ mod tests {
     #[test]
     fn test_server_close_with_no_msg() {
         let data = ""; //19
-        let mut df = DataFrame::build(data.as_bytes(), FrameType::Close, Agent::Server).unwrap();
+        let df = DataFrame::build(data.as_bytes(), FrameType::Close, Agent::Server).unwrap();
         let d_frame = Vec::from(df);
         assert_eq!(d_frame.len(), 2);
         let expected = vec![0x88u8, 0];
@@ -163,11 +163,6 @@ mod tests {
 
         fn handle_bin_msg(&self, msg: Vec<u8>) {
             assert_eq!(msg, self.bin_msg);
-        }
-
-        fn handle_control(&self, ctrl_msg: String, f_type: FrameType) {
-            assert_eq!(ctrl_msg, self.control_msg);
-            assert_eq!(self.f_type, f_type);
         }
     }
 
