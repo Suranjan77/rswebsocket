@@ -1,8 +1,8 @@
 #[cfg(test)]
 mod tests {
-    use crate::ws_core::data_frame_rx::DFParser;
-    use crate::ws_core::data_frame_tx::{Agent, DataFrame, FrameType};
-    use crate::ws_core::ws::WSHandler;
+    use crate::data_frame_rx::DFParser;
+    use crate::data_frame_tx::{Agent, DataFrame, FrameType};
+    use crate::WSHandler;
 
     #[test]
     fn test_df_1() {

@@ -1,13 +1,83 @@
 use std::collections::HashMap;
-use std::io::BufRead;
-
+use std::io::{BufRead, Read, Write};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener};
 use url::Url;
 
-use crate::server::errors;
-use crate::server::errors::{get_bad_request, HTTPError};
-use crate::ws_core::base64::decode;
-use crate::ws_core::http_utils::{parse_headers, validate_http_version};
-use crate::ws_core::{base64, sha1};
+use crate::errors;
+use crate::errors::{get_bad_request, HTTPError};
+use ws_core::base64::decode;
+use ws_core::http_utils::{parse_headers, validate_http_version};
+use ws_core::{base64, sha1, ConnectionStatus, Context, WSHandler, WSStream};
+
+pub struct WSServerListener<H>
+{
+    ctx: Context<H>,
+    listener: TcpListener,
+}
+
+impl<H> WSServerListener<H> where H:WSHandler {
+    pub fn init(port: u16, handler: H) -> Result<WSServerListener<H>, String> {
+        let conn: TcpListener = match TcpListener::bind(SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), port)) {
+            Ok(s) => s,
+            Err(_) => return Err("Failed tcp connection".to_string())
+        };
+
+        let (stream,_) = conn.accept().unwrap();
+
+        let ctx = Context { ws_state: ConnectionStatus::Closed, stream, handler };
+
+        Ok(WSServerListener { ctx, listener: conn })
+    }
+}
+
+impl<H> WSStream<H> for WSServerListener<H> where H:WSHandler {
+    fn context(&mut self) -> &mut Context<H> {
+        &mut self.ctx
+    }
+
+    fn read(&mut self) -> Result<(), String> {
+        // match self.ctx.ws_state {
+        //     ConnectionStatus::Open => { }
+        //     ConnectionStatus::Closed | ConnectionStatus::Connecting => {}
+        // }
+
+        Ok(())
+    }
+}
+
+fn handshake<H>(context: &mut Context<H>) -> Result<(), String>
+where
+    H: WSHandler,
+{
+    let mut ws_server = WSServer::new();
+
+    let handshake = ws_server.create_handshake();
+
+    if let Err(e) = context.stream.write_all(&handshake) {
+        println!("Failed to write handshake: {:?}", e);
+        return Err("Handshake failed".to_string());
+    };
+
+    let mut res_handshake = vec![];
+    match context.stream.read_to_end(&mut res_handshake) {
+        Ok(s) => println!("{} bytes read", s),
+        Err(e) => {
+            println!("Failed to read handshake: {:?}", e);
+            return Err("Handshake failed".to_string());
+        }
+    };
+
+    match ws_server.parse_handshake(res_handshake) {
+        Ok(_) => context.ws_state = ConnectionStatus::Open,
+        Err(e) => {
+            context.ws_state = ConnectionStatus::Closed;
+            println!("HttpError {:?}", e);
+            return Err(e.message);
+        }
+    };
+
+    Ok(())
+}
 
 pub struct WSServer {
     key: String,

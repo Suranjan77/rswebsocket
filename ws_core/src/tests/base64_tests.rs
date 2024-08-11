@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use crate::ws_core::base64::{decode, encode};
+    use crate::base64::{decode, encode};
 
     #[test]
     fn test_encode_sigma() {

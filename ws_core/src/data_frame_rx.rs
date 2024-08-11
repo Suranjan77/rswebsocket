@@ -1,4 +1,4 @@
-use crate::ws_core::data_frame_tx::{Agent, FrameType};
+use crate::data_frame_tx::{Agent, FrameType};
 
 impl TryFrom<u8> for FrameType {
     type Error = &'static str;
@@ -50,13 +50,13 @@ impl DFParser {
             match agent {
                 Agent::Client => {
                     if m_len & 0x80 != 0x80 {
-                        return Err("Mask bit unset is not allowed for client".to_string());
+                        return Err("Mask bit unset is not allowed for ws_client".to_string());
                     }
                     true
                 }
                 Agent::Server => {
                     if m_len & 0x80 != 0 {
-                        return Err("Mask bit set is not allowed for server".to_string());
+                        return Err("Mask bit set is not allowed for ws_server".to_string());
                     }
                     false
                 }

@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use crate::ws_core::sha1::hash;
+    use crate::sha1::hash;
 
     #[test]
     fn test_sha1_empty_string() {
