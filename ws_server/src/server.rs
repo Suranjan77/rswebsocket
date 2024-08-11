@@ -28,7 +28,7 @@ where
         let (stream, _) = conn.accept().unwrap();
 
         let ctx = Context {
-            ws_state: ConnectionStatus::Closed,
+            ws_state: ConnectionStatus::Connecting,
             stream,
             handler,
         };
@@ -49,30 +49,29 @@ where
     }
 
     fn read(&mut self) -> Result<(), String> {
-        // match self.ctx.ws_state {
-        //     ConnectionStatus::Open => { }
-        //     ConnectionStatus::Closed | ConnectionStatus::Connecting => {}
-        // }
-
-        Ok(())
+        match self.ctx.ws_state {
+            ConnectionStatus::Connecting => {
+                handshake(&mut self.ctx)?;
+                self.ctx.ws_state = ConnectionStatus::Open;
+                Ok(())
+            },
+            ConnectionStatus::Open => WSStream::read(self),
+            ConnectionStatus::Closed => {
+                self.shutdown("Connection closed")?;
+                Err("Connection already closed".to_string())
+            }
+        }
     }
 }
 
-fn handshake<H>(context: &mut Context<H>) -> Result<(), String>
+fn handshake<H>(ctx: &mut Context<H>) -> Result<(), String>
 where
     H: WSHandler,
 {
     let mut ws_server = WSServer::new();
 
-    let handshake = ws_server.create_handshake();
-
-    if let Err(e) = context.stream.write_all(&handshake) {
-        println!("Failed to write handshake: {:?}", e);
-        return Err("Handshake failed".to_string());
-    };
-
-    let mut res_handshake = vec![];
-    match context.stream.read_to_end(&mut res_handshake) {
+    let mut client_handshake = vec![];
+    match ctx.stream.read_to_end(&mut client_handshake) {
         Ok(s) => println!("{} bytes read", s),
         Err(e) => {
             println!("Failed to read handshake: {:?}", e);
@@ -80,13 +79,20 @@ where
         }
     };
 
-    match ws_server.parse_handshake(res_handshake) {
-        Ok(_) => context.ws_state = ConnectionStatus::Open,
+    match ws_server.parse_handshake(client_handshake) {
+        Ok(_) => ctx.ws_state = ConnectionStatus::Open,
         Err(e) => {
-            context.ws_state = ConnectionStatus::Closed;
+            ctx.ws_state = ConnectionStatus::Closed;
             println!("HttpError {:?}", e);
             return Err(e.message);
         }
+    };
+
+    let handshake = ws_server.create_handshake();
+
+    if let Err(e) = ctx.stream.write_all(&handshake) {
+        println!("Failed to write handshake: {:?}", e);
+        return Err("Handshake failed".to_string());
     };
 
     Ok(())

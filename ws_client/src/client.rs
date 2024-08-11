@@ -16,7 +16,7 @@ impl<H> WSClientStream<H>
 where
     H: WSHandler,
 {
-    pub fn connect(&mut self, host: &str, handler: H) -> Result<Self, String> {
+    pub fn connect(host: &str, handler: H) -> Result<Self, String> {
         let host_uri = match Url::parse(host) {
             Ok(uri) => uri,
             Err(_) => return Err("Invalid host url".to_string()),
@@ -36,11 +36,13 @@ where
             handler,
         };
 
-        match self.handshake() {
-            Ok(_) => Ok(WSClientStream {
-                host: host_uri,
-                ctx: context,
-            }),
+        let mut c_stream = WSClientStream {
+            host: host_uri,
+            ctx: context,
+        };
+
+        match c_stream.handshake() {
+            Ok(_) => Ok(c_stream),
             Err(e) => Err(e),
         }
     }
@@ -48,7 +50,8 @@ where
     fn handshake(&mut self) -> Result<(), String> {
         let handshake = create_handshake(&self.host);
 
-        match self.ctx.stream.write_all(handshake.as_bytes()) {
+        match self.ctx.stream
+            .write_all(handshake.as_bytes()) {
             Ok(_) => println!("bytes written"),
             Err(e) => {
                 println!("Failed to write handshake: {:?}", e);
@@ -57,7 +60,8 @@ where
         };
 
         let mut res_handshake = vec![];
-        match self.ctx.stream.read_to_end(&mut res_handshake) {
+        match self.ctx.stream
+            .read_to_end(&mut res_handshake) {
             Ok(s) => println!("{} bytes read", s),
             Err(e) => {
                 println!("Failed to read handshake: {:?}", e);

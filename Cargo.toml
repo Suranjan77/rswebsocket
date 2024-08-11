@@ -1,2 +1,2 @@
 [workspace]
-members = ["ws_server", "ws_client", "ws_core"]
+members = ["ws_server", "ws_client", "ws_core", "ws_example"]

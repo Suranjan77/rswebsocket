@@ -5,6 +5,7 @@
       <sourceFolder url="file://$MODULE_DIR$/ws_client/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/ws_core/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/ws_server/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/ws_example/src" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/target" />
     </content>
     <orderEntry type="inheritedJdk" />
