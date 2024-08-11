@@ -8,7 +8,6 @@ mod tests;
 use std::io::{Read, Write};
 use std::net::{Shutdown, TcpStream};
 
-
 use crate::data_frame_rx::DFParser;
 use crate::data_frame_tx::DataFrame;
 use data_frame_tx::{Agent, FrameType};
@@ -26,8 +25,7 @@ pub enum ConnectionStatus {
     Closed,
 }
 
-pub struct Context<H>
-{
+pub struct Context<H> {
     pub ws_state: ConnectionStatus,
     pub stream: TcpStream,
     pub handler: H,

@@ -9,28 +9,41 @@ use ws_core::base64::decode;
 use ws_core::http_utils::{parse_headers, validate_http_version};
 use ws_core::{base64, sha1, ConnectionStatus, Context, WSHandler, WSStream};
 
-pub struct WSServerListener<H>
-{
+pub struct WSServerListener<H> {
     ctx: Context<H>,
     listener: TcpListener,
 }
 
-impl<H> WSServerListener<H> where H:WSHandler {
+impl<H> WSServerListener<H>
+where
+    H: WSHandler,
+{
     pub fn init(port: u16, handler: H) -> Result<WSServerListener<H>, String> {
-        let conn: TcpListener = match TcpListener::bind(SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), port)) {
-            Ok(s) => s,
-            Err(_) => return Err("Failed tcp connection".to_string())
+        let conn: TcpListener =
+            match TcpListener::bind(SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), port)) {
+                Ok(s) => s,
+                Err(_) => return Err("Failed tcp connection".to_string()),
+            };
+
+        let (stream, _) = conn.accept().unwrap();
+
+        let ctx = Context {
+            ws_state: ConnectionStatus::Closed,
+            stream,
+            handler,
         };
 
-        let (stream,_) = conn.accept().unwrap();
-
-        let ctx = Context { ws_state: ConnectionStatus::Closed, stream, handler };
-
-        Ok(WSServerListener { ctx, listener: conn })
+        Ok(WSServerListener {
+            ctx,
+            listener: conn,
+        })
     }
 }
 
-impl<H> WSStream<H> for WSServerListener<H> where H:WSHandler {
+impl<H> WSStream<H> for WSServerListener<H>
+where
+    H: WSHandler,
+{
     fn context(&mut self) -> &mut Context<H> {
         &mut self.ctx
     }

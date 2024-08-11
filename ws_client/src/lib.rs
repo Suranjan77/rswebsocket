@@ -1,2 +1,2 @@
-mod client_tests;
 pub mod client;
+mod client_tests;

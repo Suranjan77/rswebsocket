@@ -7,13 +7,15 @@ use url::Url;
 use ws_core::http_utils::{parse_headers, validate_http_version};
 use ws_core::{base64, ConnectionStatus, Context, WSHandler, WSStream};
 
-pub struct WSClientStream<H>
-{
+pub struct WSClientStream<H> {
     ctx: Context<H>,
     host: Url,
 }
 
-impl<H> WSClientStream<H> where H:WSHandler {
+impl<H> WSClientStream<H>
+where
+    H: WSHandler,
+{
     pub fn connect(&mut self, host: &str, handler: H) -> Result<Self, String> {
         let host_uri = match Url::parse(host) {
             Ok(uri) => uri,
@@ -34,15 +36,16 @@ impl<H> WSClientStream<H> where H:WSHandler {
             handler,
         };
 
-
         match self.handshake() {
-            Ok(_) => Ok(WSClientStream { host: host_uri, ctx: context }),
+            Ok(_) => Ok(WSClientStream {
+                host: host_uri,
+                ctx: context,
+            }),
             Err(e) => Err(e),
         }
     }
 
-    fn handshake(&mut self) -> Result<(), String>
-    {
+    fn handshake(&mut self) -> Result<(), String> {
         let handshake = create_handshake(&self.host);
 
         match self.ctx.stream.write_all(handshake.as_bytes()) {
@@ -74,12 +77,14 @@ impl<H> WSClientStream<H> where H:WSHandler {
     }
 }
 
-impl<H> WSStream<H> for WSClientStream<H> where H:WSHandler {
+impl<H> WSStream<H> for WSClientStream<H>
+where
+    H: WSHandler,
+{
     fn context(&mut self) -> &mut Context<H> {
         &mut self.ctx
     }
 }
-
 
 fn create_handshake(host: &Url) -> String {
     let mut handshake: String = String::from("");
@@ -89,8 +94,7 @@ fn create_handshake(host: &Url) -> String {
     handshake.push_str("Host: ");
     handshake.push_str(host.host_str().unwrap());
     handshake.push('\n');
-    handshake.push_str(
-        "Upgrade: websocket\nConnection: Upgrade\nSec-WebSocket-Version: 13\n");
+    handshake.push_str("Upgrade: websocket\nConnection: Upgrade\nSec-WebSocket-Version: 13\n");
     handshake.push_str("Sec-WebSocket-Key: ");
     handshake.push_str(sec_ws_key().as_str());
     handshake
