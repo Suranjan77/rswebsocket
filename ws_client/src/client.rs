@@ -1,7 +1,9 @@
 use rand::RngCore;
 use std::collections::HashMap;
 use std::io::{BufRead, Read, Write};
-use std::net::TcpStream;
+use std::net::{IpAddr, SocketAddr, TcpStream};
+use std::str::FromStr;
+use std::sync::Arc;
 use url::Url;
 
 use ws_core::http_utils::{parse_headers, validate_http_version};
@@ -10,6 +12,18 @@ use ws_core::{base64, ConnectionStatus, Context, WSHandler, WSStream};
 pub struct WSClientStream<H> {
     ctx: Context<H>,
     host: Url,
+}
+
+impl<H> Clone for WSClientStream<H>
+where
+    H: WSHandler,
+{
+    fn clone(&self) -> Self {
+        WSClientStream {
+            ctx: self.ctx.clone(),
+            host: self.host.clone(),
+        }
+    }
 }
 
 impl<H> WSClientStream<H>
@@ -22,7 +36,9 @@ where
             Err(_) => return Err("Invalid host url".to_string()),
         };
 
-        let tcp_stream = match TcpStream::connect(host_uri.to_string()) {
+        let soc_addr = SocketAddr::new(IpAddr::from_str(host_uri.host_str().unwrap()).unwrap(), host_uri.port().unwrap());
+
+        let tcp_stream = match TcpStream::connect(soc_addr) {
             Ok(t) => t,
             Err(e) => {
                 println!("{:?}", e);
@@ -30,10 +46,10 @@ where
             }
         };
 
-        let mut context = Context {
+        let context = Context {
             ws_state: ConnectionStatus::Connecting,
             stream: tcp_stream,
-            handler,
+            handler: Arc::new(handler),
         };
 
         let mut c_stream = WSClientStream {
@@ -50,9 +66,8 @@ where
     fn handshake(&mut self) -> Result<(), String> {
         let handshake = create_handshake(&self.host);
 
-        match self.ctx.stream
-            .write_all(handshake.as_bytes()) {
-            Ok(_) => println!("bytes written"),
+        match self.ctx.stream.write_all(handshake.as_bytes()) {
+            Ok(_) => println!("\nClient Handshake\n{handshake}\n"),
             Err(e) => {
                 println!("Failed to write handshake: {:?}", e);
                 return Err("Handshake failed".to_string());
@@ -60,8 +75,7 @@ where
         };
 
         let mut res_handshake = vec![];
-        match self.ctx.stream
-            .read_to_end(&mut res_handshake) {
+        match self.ctx.stream.read_to_end(&mut res_handshake) {
             Ok(s) => println!("{} bytes read", s),
             Err(e) => {
                 println!("Failed to read handshake: {:?}", e);

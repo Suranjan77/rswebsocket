@@ -5,12 +5,12 @@ pub mod http_utils;
 pub mod sha1;
 mod tests;
 
-use std::io::{Read, Write};
-use std::net::{Shutdown, TcpStream};
-
 use crate::data_frame_rx::DFParser;
 use crate::data_frame_tx::DataFrame;
 use data_frame_tx::{Agent, FrameType};
+use std::io::{Read, Write};
+use std::net::{Shutdown, TcpStream};
+use std::sync::Arc;
 
 pub trait WSHandler {
     fn who(&self) -> Agent;
@@ -28,7 +28,20 @@ pub enum ConnectionStatus {
 pub struct Context<H> {
     pub ws_state: ConnectionStatus,
     pub stream: TcpStream,
-    pub handler: H,
+    pub handler: Arc<H>,
+}
+
+impl<H> Clone for Context<H>
+where
+    H: WSHandler,
+{
+    fn clone(&self) -> Self {
+        Context {
+            ws_state: self.ws_state.clone(),
+            stream: self.stream.try_clone().unwrap(),
+            handler: self.handler.clone(),
+        }
+    }
 }
 
 pub trait WSStream<H>
@@ -113,7 +126,7 @@ where
     fn shutdown(&mut self, msg: &str) -> Result<(), String> {
         self.write(msg.as_bytes(), FrameType::Close)?;
         let ctx = self.context();
-        ctx.ws_state == ConnectionStatus::Closed;
+        ctx.ws_state = ConnectionStatus::Closed;
         match ctx.stream.shutdown(Shutdown::Both) {
             Ok(_) => (),
             Err(e) => return Err(e.to_string()),

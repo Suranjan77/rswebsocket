@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::io::{BufRead, Read, Write};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener};
+use std::sync::Arc;
 use url::Url;
 
 use crate::errors;
@@ -11,7 +12,17 @@ use ws_core::{base64, sha1, ConnectionStatus, Context, WSHandler, WSStream};
 
 pub struct WSServerListener<H> {
     ctx: Context<H>,
-    listener: TcpListener,
+}
+
+impl<H> Clone for WSServerListener<H>
+where
+    H: WSHandler,
+{
+    fn clone(&self) -> Self {
+        WSServerListener {
+            ctx: self.ctx.clone(),
+        }
+    }
 }
 
 impl<H> WSServerListener<H>
@@ -30,13 +41,10 @@ where
         let ctx = Context {
             ws_state: ConnectionStatus::Connecting,
             stream,
-            handler,
+            handler: Arc::new(handler),
         };
 
-        Ok(WSServerListener {
-            ctx,
-            listener: conn,
-        })
+        Ok(WSServerListener { ctx })
     }
 }
 
@@ -57,6 +65,7 @@ where
             },
             ConnectionStatus::Open => WSStream::read(self),
             ConnectionStatus::Closed => {
+                println!("Connection closed");
                 self.shutdown("Connection closed")?;
                 Err("Connection already closed".to_string())
             }
