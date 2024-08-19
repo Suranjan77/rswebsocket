@@ -41,23 +41,20 @@ impl WSHandler for ServerHandler {
 
 fn main() {
     println!("Starting server and client");
-    let (s_tx, server_handle) = start_server();
-    thread::sleep(Duration::from_secs(2));
+    // let (s_tx, server_handle) = start_server();
+    // thread::sleep(Duration::from_secs(2));
     let (c_tx, client_handle) = start_client();
     thread::sleep(Duration::from_secs(2));
 
     loop {
         let mut inp = String::new();
-        println!("Enter msg, (prefix /client or /server) > ");
+        println!("Enter msg, (prefix /msg) > ");
         let cont = match io::stdin().read_line(&mut inp) {
             Ok(_) => {
                 let inp_split: Vec<String> = inp.splitn(2, ' ').map(|s| s.to_string()).collect();
 
-                if inp_split[0] == "/client" {
+                if inp_split[0] == "/msg" {
                     c_tx.send(inp_split[1].as_bytes().to_vec()).unwrap();
-                    true
-                } else if inp_split[0] == "/server" {
-                    s_tx.send(inp_split[1].as_bytes().to_vec()).unwrap();
                     true
                 } else {
                     println!("Shutting down client and server ...");
@@ -75,7 +72,7 @@ fn main() {
         }
     }
 
-    server_handle.join().unwrap();
+    // server_handle.join().unwrap();
     client_handle.join().unwrap();
 }
 
