@@ -41,10 +41,10 @@ impl WSHandler for ServerHandler {
 
 fn main() {
     println!("Starting server and client");
-    // let (s_tx, server_handle) = start_server();
-    // thread::sleep(Duration::from_secs(2));
-    let (c_tx, client_handle) = start_client();
+    let (c_tx, server_handle) = start_server();
     thread::sleep(Duration::from_secs(2));
+    // let (c_tx, client_handle) = start_client();
+    // thread::sleep(Duration::from_secs(2));
 
     loop {
         let mut inp = String::new();
@@ -72,8 +72,8 @@ fn main() {
         }
     }
 
-    // server_handle.join().unwrap();
-    client_handle.join().unwrap();
+    server_handle.join().unwrap();
+    // client_handle.join().unwrap();
 }
 
 fn start_client() -> (Sender<Vec<u8>>, JoinHandle<()>) {
