@@ -80,7 +80,7 @@ fn start_client() -> (Sender<Vec<u8>>, JoinHandle<()>) {
     let (c_tx, c_rx): (Sender<Vec<u8>>, Receiver<Vec<u8>>) = channel();
     let main_client_thread = thread::spawn(move || {
         let mut client =
-            WSClientStream::connect("ws://127.0.0.1:8080", ClientHandler {}).unwrap();
+            WSClientStream::connect("ws://192.168.4.69:8080", ClientHandler {}).unwrap();
 
         let mut c1 = client.clone();
         let client_read_thread = thread::spawn(move || loop {

@@ -36,7 +36,16 @@ where
                 Err(_) => return Err("Failed tcp connection".to_string()),
             };
 
-        let (stream, _) = conn.accept().unwrap();
+        let (stream, _) = match conn.accept() {
+            Ok((s, a)) => {
+                println!("Client connected");
+                (s,a)
+            },
+            Err(e) => {
+                println!("Err waiting for client {:?}", e);
+                return Err("Error".to_string());
+            },
+        };
 
         let ctx = Context {
             ws_state: ConnectionStatus::Connecting,
