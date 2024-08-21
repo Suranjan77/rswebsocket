@@ -48,15 +48,15 @@ impl DFParser {
 
         if let Some(m_len) = buf.get(1) {
             match agent {
-                Agent::Client => {
+                Agent::Server => {
                     if m_len & 0x80 != 0x80 {
-                        return Err("Mask bit unset is not allowed for ws_client".to_string());
+                        return Err("Mask bit unset is not allowed for client msg".to_string());
                     }
                     true
                 }
-                Agent::Server => {
+                Agent::Client => {
                     if m_len & 0x80 != 0 {
-                        return Err("Mask bit set is not allowed for ws_server".to_string());
+                        return Err("Mask bit set is not allowed for server nsg".to_string());
                     }
                     false
                 }
@@ -94,20 +94,20 @@ impl DFParser {
             };
 
             let payload: Vec<u8> = match agent {
-                Agent::Client => match buf.get(mask_idx..mask_idx + 4) {
+                Agent::Server => match buf.get(mask_idx..mask_idx + 4) {
                     Some(m) => match buf.get(mask_idx + 4..payload_len + mask_idx + 4) {
                         Some(l) => l
                             .iter()
                             .enumerate()
                             .map(|(i, data)| *data ^ m[i % 4])
                             .collect(),
-                        None => return Err("Invalid payload, incomplete payload".to_string()),
+                        None => return Err("Invalid payload from client, incomplete payload".to_string()),
                     },
                     None => return Err("Invalid mask".to_string()),
                 },
-                Agent::Server => match buf.get(mask_idx..payload_len) {
+                Agent::Client => match buf.get(mask_idx..payload_len) {
                     Some(l) => l.to_vec(),
-                    None => return Err("Invalid payload, incomplete payload".to_string()),
+                    None => return Err("Invalid payload from server, incomplete payload".to_string()),
                 },
             };
 

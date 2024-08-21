@@ -55,7 +55,7 @@ pub fn server() {
                             tx.send(inp_split[1].as_bytes().to_vec()).unwrap();
                             true
                         } else {
-                            println!("Shutting down client and server ...");
+                            println!("Shutting down client from server ...");
                             false
                         }
                     }
@@ -69,6 +69,8 @@ pub fn server() {
                     break;
                 }
             }
+
+            client.ws_stream.shutdown("Shut down").unwrap();
 
             r_handle.join().unwrap();
             w_handle.join().unwrap();

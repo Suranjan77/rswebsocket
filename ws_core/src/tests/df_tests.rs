@@ -190,7 +190,7 @@ mod tests {
                 0x74, 0x69, 0x6F, 0x6E, 0x2E,
             ],
             f_type: FrameType::Close,
-            agent: Agent::Client,
+            agent: Agent::Server,
         };
 
         let close_df = vec![

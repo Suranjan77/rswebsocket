@@ -21,7 +21,7 @@ impl WSHandler for ClientHandler {
 }
 
 pub fn client() {
-    let client = WSClient::connect("http://127.0.0.1:8080", ClientHandler {}).unwrap();
+    let mut client = WSClient::connect("http://127.0.0.1:8080", ClientHandler {}).unwrap();
 
     let (tx, rx): (Sender<Vec<u8>>, Receiver<Vec<u8>>) = channel();
 
@@ -50,7 +50,7 @@ pub fn client() {
                     tx.send(inp_split[1].as_bytes().to_vec()).unwrap();
                     true
                 } else {
-                    println!("Shutting down client and server ...");
+                    println!("Shutting down client ...");
                     false
                 }
             }
@@ -64,6 +64,8 @@ pub fn client() {
             break;
         }
     });
+
+    client.ws_stream.shutdown("Shut down").unwrap();
 
     io_handle.join().unwrap();
     r_handle.join().unwrap();
