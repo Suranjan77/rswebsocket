@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
     use crate::errors::HTTPStatus;
-    use crate::server::WSServer;
+    use crate::server::WSUpgrade;
 
     #[test]
     fn test_ws_handshake() {
@@ -23,7 +23,7 @@ mod tests {
         Sec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo="
             .to_ascii_lowercase();
 
-        let mut ws_server = WSServer::new();
+        let mut ws_server = WSUpgrade::new();
         ws_server
             .parse_handshake(handshake.as_bytes().to_vec())
             .unwrap();
@@ -51,7 +51,7 @@ mod tests {
                 Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\n\
                 Sec-WebSocket-Extensions: permessage-deflate; client_max_window_bits";
 
-        let mut ws_server = WSServer::new();
+        let mut ws_server = WSUpgrade::new();
 
         validate_400_error(handshake, &mut ws_server, 400, HTTPStatus::BadRequest);
     }
@@ -70,7 +70,7 @@ mod tests {
                 Sec-WebSocket-Key: YWJj\n\
                 Sec-WebSocket-Extensions: permessage-deflate; client_max_window_bits";
 
-        let mut ws_server = WSServer::new();
+        let mut ws_server = WSUpgrade::new();
 
         validate_400_error(handshake, &mut ws_server, 400, HTTPStatus::BadRequest);
     }
@@ -88,7 +88,7 @@ mod tests {
                 Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\n\
                 Sec-WebSocket-Extensions: permessage-deflate; client_max_window_bits";
 
-        let mut ws_server = WSServer::new();
+        let mut ws_server = WSUpgrade::new();
 
         validate_400_error(handshake, &mut ws_server, 400, HTTPStatus::BadRequest);
     }
@@ -107,14 +107,14 @@ mod tests {
                 Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\n\
                 Sec-WebSocket-Extensions: permessage-deflate; client_max_window_bits";
 
-        let mut ws_server = WSServer::new();
+        let mut ws_server = WSUpgrade::new();
 
         validate_400_error(handshake, &mut ws_server, 405, HTTPStatus::MethodNotAllowed);
     }
 
     fn validate_400_error(
         handshake: &str,
-        ws_server: &mut WSServer,
+        ws_server: &mut WSUpgrade,
         http_code: u16,
         status: HTTPStatus,
     ) {

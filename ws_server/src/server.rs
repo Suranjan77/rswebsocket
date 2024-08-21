@@ -1,6 +1,7 @@
 use std::collections::HashMap;
-use std::io::{BufRead, Read, Write};
-use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener};
+use std::io;
+use std::io::{BufRead, BufReader, Read, Write};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener, TcpStream};
 use std::sync::Arc;
 use url::Url;
 
@@ -8,98 +9,104 @@ use crate::errors;
 use crate::errors::{get_bad_request, HTTPError};
 use ws_core::base64::decode;
 use ws_core::http_utils::{parse_headers, validate_http_version};
-use ws_core::{base64, sha1, ConnectionStatus, Context, WSHandler, WSStream};
+use ws_core::{base64, sha1, ConnectionStatus, WSHandler, WSStream};
 
 pub struct WSServerListener<H> {
-    ctx: Context<H>,
+    listener: TcpListener,
+    handler: Arc<H>,
 }
 
-impl<H> Clone for WSServerListener<H>
-where
-    H: WSHandler,
-{
-    fn clone(&self) -> Self {
-        WSServerListener {
-            ctx: self.ctx.clone(),
-        }
-    }
+pub struct IncomingClient<'a, H> {
+    ws_listener: &'a WSServerListener<H>,
+}
+
+pub struct ConnectedClient<H> {
+    pub ws_state: ConnectionStatus,
+    pub ws_stream: WSStream<H>,
 }
 
 impl<H> WSServerListener<H>
 where
     H: WSHandler,
 {
-    pub fn init(port: u16, handler: H) -> Result<WSServerListener<H>, String> {
+    pub fn init(port: u16, handler: H) -> Result<WSServerListener<H>, String>
+    where
+        H: WSHandler,
+    {
         let conn: TcpListener =
             match TcpListener::bind(SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), port)) {
                 Ok(s) => s,
-                Err(_) => return Err("Failed tcp connection".to_string()),
+                Err(_) => return Err("Failed bind tcp connection".to_string()),
             };
 
-        let (stream, _) = conn.accept().unwrap();
-
-        let ctx = Context {
-            ws_state: ConnectionStatus::Connecting,
-            stream,
+        Ok(WSServerListener {
+            listener: conn,
             handler: Arc::new(handler),
-        };
-
-        Ok(WSServerListener { ctx })
-    }
-}
-
-impl<H> WSStream<H> for WSServerListener<H>
-where
-    H: WSHandler,
-{
-    fn context(&mut self) -> &mut Context<H> {
-        &mut self.ctx
+        })
     }
 
-    fn read(&mut self) -> Result<(), String> {
-        match self.ctx.ws_state {
-            ConnectionStatus::Connecting => {
-                handshake(&mut self.ctx)?;
-                self.ctx.ws_state = ConnectionStatus::Open;
-                Ok(())
-            },
-            ConnectionStatus::Open => WSStream::read(self),
-            ConnectionStatus::Closed => {
-                println!("Connection closed");
-                self.shutdown("Connection closed")?;
-                Err("Connection already closed".to_string())
+    pub fn listen(&self) -> IncomingClient<'_, H> {
+        IncomingClient { ws_listener: self }
+    }
+
+    pub fn accept(&self) -> Result<ConnectedClient<H>, String>
+    where
+        H: WSHandler,
+    {
+        let req = self.listener.accept().map(|c| c.0);
+
+        match req {
+            Ok(stream) => {
+                let mut str_cpy = stream.try_clone().unwrap();
+                let _ = handshake(&mut str_cpy)?;
+                Ok(ConnectedClient {
+                    ws_state: ConnectionStatus::Open,
+                    ws_stream: WSStream {
+                        stream: str_cpy,
+                        handler: self.handler.clone(),
+                    },
+                })
             }
+            _ => Err("".to_string()),
         }
     }
 }
 
-fn handshake<H>(ctx: &mut Context<H>) -> Result<(), String>
+impl<H> Iterator for IncomingClient<'_, H>
 where
     H: WSHandler,
 {
-    let mut ws_server = WSServer::new();
+    type Item = io::Result<ConnectedClient<H>>;
 
-    let mut client_handshake = vec![];
-    match ctx.stream.read_to_end(&mut client_handshake) {
-        Ok(s) => println!("{} bytes read", s),
+    fn next(&mut self) -> Option<io::Result<ConnectedClient<H>>> {
+        match self.ws_listener.accept() {
+            Ok(l) => Some(Ok(l)),
+            _ => None,
+        }
+    }
+}
+
+fn handshake(stream: &mut TcpStream) -> Result<(), String> {
+    let mut ws_upgrade = WSUpgrade::new();
+
+    println!("Initiated handshake with client");
+
+    let mut buf = [0u8; 512];
+    let r_size = match stream.read(&mut buf) {
+        Ok(n) => n,
         Err(e) => {
             println!("Failed to read handshake: {:?}", e);
             return Err("Handshake failed".to_string());
         }
     };
 
-    match ws_server.parse_handshake(client_handshake) {
-        Ok(_) => ctx.ws_state = ConnectionStatus::Open,
-        Err(e) => {
-            ctx.ws_state = ConnectionStatus::Closed;
-            println!("HttpError {:?}", e);
-            return Err(e.message);
-        }
+    if let Err(e) = ws_upgrade.parse_handshake(buf[..r_size].to_vec()) {
+        println!("HttpError {:?}", e);
+        return Err(e.message);
     };
 
-    let handshake = ws_server.create_handshake();
-
-    if let Err(e) = ctx.stream.write_all(&handshake) {
+    let server_handshake = ws_upgrade.create_handshake();
+    if let Err(e) = stream.write_all(&server_handshake) {
         println!("Failed to write handshake: {:?}", e);
         return Err("Handshake failed".to_string());
     };
@@ -107,7 +114,7 @@ where
     Ok(())
 }
 
-pub struct WSServer {
+pub struct WSUpgrade {
     key: String,
     resource: String,
     host: String,
@@ -117,9 +124,9 @@ pub struct WSServer {
     version: u8,
 }
 
-impl Default for WSServer {
+impl Default for WSUpgrade {
     fn default() -> Self {
-        WSServer {
+        WSUpgrade {
             resource: String::from(""),
             host: String::from(""),
             origin: String::from(""),
@@ -131,9 +138,9 @@ impl Default for WSServer {
     }
 }
 
-impl WSServer {
+impl WSUpgrade {
     pub fn new() -> Self {
-        WSServer {
+        WSUpgrade {
             ..Default::default()
         }
     }

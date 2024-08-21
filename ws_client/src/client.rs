@@ -1,32 +1,20 @@
 use rand::RngCore;
 use std::collections::HashMap;
 use std::io::{BufRead, Read, Write};
-use std::net::{IpAddr, SocketAddr, TcpStream};
+use std::net::{Ipv4Addr, SocketAddrV4, TcpStream};
 use std::str::FromStr;
 use std::sync::Arc;
 use url::Url;
 
 use ws_core::http_utils::{parse_headers, validate_http_version};
-use ws_core::{base64, ConnectionStatus, Context, WSHandler, WSStream};
+use ws_core::{base64, ConnectionStatus, WSHandler, WSStream};
 
-pub struct WSClientStream<H> {
-    ctx: Context<H>,
-    host: Url,
+pub struct WSClient<H> {
+    pub ws_state: ConnectionStatus,
+    pub ws_stream: WSStream<H>,
 }
 
-impl<H> Clone for WSClientStream<H>
-where
-    H: WSHandler,
-{
-    fn clone(&self) -> Self {
-        WSClientStream {
-            ctx: self.ctx.clone(),
-            host: self.host.clone(),
-        }
-    }
-}
-
-impl<H> WSClientStream<H>
+impl<H> WSClient<H>
 where
     H: WSHandler,
 {
@@ -36,9 +24,12 @@ where
             Err(_) => return Err("Invalid host url".to_string()),
         };
 
-        let soc_addr = SocketAddr::new(IpAddr::from_str(host_uri.host_str().unwrap()).unwrap(), host_uri.port().unwrap());
+        let soc_addr = SocketAddrV4::new(
+            Ipv4Addr::from_str(host_uri.host_str().unwrap()).unwrap(),
+            host_uri.port().unwrap(),
+        );
 
-        let tcp_stream = match TcpStream::connect(soc_addr) {
+        let mut tcp_stream = match TcpStream::connect(soc_addr) {
             Ok(t) => t,
             Err(e) => {
                 println!("{:?}", e);
@@ -46,62 +37,41 @@ where
             }
         };
 
-        let context = Context {
-            ws_state: ConnectionStatus::Connecting,
-            stream: tcp_stream,
-            handler: Arc::new(handler),
-        };
-
-        let mut c_stream = WSClientStream {
-            host: host_uri,
-            ctx: context,
-        };
-
-        match c_stream.handshake() {
-            Ok(_) => Ok(c_stream),
+        match handshake(&host_uri, &mut tcp_stream) {
+            Ok(_) => Ok(WSClient {
+                ws_state: ConnectionStatus::Open,
+                ws_stream: WSStream {
+                    stream: tcp_stream,
+                    handler: Arc::new(handler),
+                },
+            }),
             Err(e) => Err(e),
         }
     }
-
-    fn handshake(&mut self) -> Result<(), String> {
-        let handshake = create_handshake(&self.host);
-
-        match self.ctx.stream.write_all(handshake.as_bytes()) {
-            Ok(_) => println!("\nClient Handshake\n{handshake}\n"),
-            Err(e) => {
-                println!("Failed to write handshake: {:?}", e);
-                return Err("Handshake failed".to_string());
-            }
-        };
-
-        let mut res_handshake = vec![];
-        match self.ctx.stream.read_to_end(&mut res_handshake) {
-            Ok(s) => println!("{} bytes read", s),
-            Err(e) => {
-                println!("Failed to read handshake: {:?}", e);
-                return Err("Handshake failed".to_string());
-            }
-        };
-
-        match parse_handshake(res_handshake) {
-            Ok(_) => self.ctx.ws_state = ConnectionStatus::Open,
-            Err(e) => {
-                self.ctx.ws_state = ConnectionStatus::Closed;
-                return Err(e);
-            }
-        };
-
-        Ok(())
-    }
 }
+fn handshake(host: &Url, stream: &mut TcpStream) -> Result<(), String> {
+    let handshake = create_handshake(host);
 
-impl<H> WSStream<H> for WSClientStream<H>
-where
-    H: WSHandler,
-{
-    fn context(&mut self) -> &mut Context<H> {
-        &mut self.ctx
-    }
+    match stream.write_all(handshake.as_bytes()) {
+        Ok(_) => println!("\nClient Handshake\n{handshake}\n"),
+        Err(e) => {
+            println!("Failed to write handshake: {:?}", e);
+            return Err("Handshake failed".to_string());
+        }
+    };
+
+    let mut buf = [0u8; 512];
+    let r_size = match stream.read(&mut buf) {
+        Ok(n) => n,
+        Err(e) => {
+            println!("Failed to read handshake: {:?}", e);
+            return Err("Handshake failed".to_string());
+        }
+    };
+
+    parse_handshake(buf[..r_size].to_vec())?;
+
+    Ok(())
 }
 
 fn create_handshake(host: &Url) -> String {
@@ -114,7 +84,8 @@ fn create_handshake(host: &Url) -> String {
     handshake.push('\n');
     handshake.push_str("Upgrade: websocket\nConnection: Upgrade\nSec-WebSocket-Version: 13\n");
     handshake.push_str("Sec-WebSocket-Key: ");
-    handshake.push_str(sec_ws_key().as_str());
+    let key = sec_ws_key();
+    handshake.push_str(&key);
     handshake
 }
 

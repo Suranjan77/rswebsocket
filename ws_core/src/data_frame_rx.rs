@@ -48,13 +48,13 @@ impl DFParser {
 
         if let Some(m_len) = buf.get(1) {
             match agent {
-                Agent::Client => {
+                Agent::Server => {
                     if m_len & 0x80 != 0x80 {
                         return Err("Mask bit unset is not allowed for ws_client".to_string());
                     }
                     true
                 }
-                Agent::Server => {
+                Agent::Client => {
                     if m_len & 0x80 != 0 {
                         return Err("Mask bit set is not allowed for ws_server".to_string());
                     }

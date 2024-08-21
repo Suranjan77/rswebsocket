@@ -38,7 +38,7 @@ fn handle_final_quant(bin_str: &str, encoded_str: &mut String) {
     encoded_str.push_str("=".repeat((6 - (bin_str.len() % 6)) / 2).as_str());
 }
 
-pub fn decode(s: &str) -> String {
+pub fn decode(s: &str) -> Vec<u8> {
     let mut bin_str = String::from("");
     for c in s.chars() {
         let idx = match BASE64_TBL.iter().position(|r| c.eq(r)) {
@@ -66,5 +66,5 @@ pub fn decode(s: &str) -> String {
         decoded.push(decoded_byte);
     }
 
-    String::from_utf8(decoded).unwrap()
+    decoded
 }

@@ -6,3 +6,4 @@ authors = ["Suranjan <7suranjanpoudel7@gmail.com>"]
 
 [dependencies]
 rand = "0.9.0-alpha.2"
+base64 = "0.22.1"
