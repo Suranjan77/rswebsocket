@@ -1,0 +1,10 @@
+[package]
+name = "ws_example"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+ws_server = {  path = "../ws_server" }
+ws_client = { path = "../ws_client" }
+ws_core = { path = "../ws_core" }
+

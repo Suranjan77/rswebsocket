@@ -1,15 +1,120 @@
 use std::collections::HashMap;
-use std::io::BufRead;
-
+use std::io;
+use std::io::{BufRead, Read, Write};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener, TcpStream};
+use std::sync::Arc;
 use url::Url;
 
-use crate::server::errors;
-use crate::server::errors::{get_bad_request, HTTPError};
-use crate::ws_core::base64::decode;
-use crate::ws_core::http_utils::{parse_headers, validate_http_version};
-use crate::ws_core::{base64, sha1};
+use crate::errors;
+use crate::errors::{get_bad_request, HTTPError};
+use ws_core::base64::decode;
+use ws_core::http_utils::{parse_headers, validate_http_version};
+use ws_core::{base64, sha1, ConnectionStatus, WSHandler, WSStream};
 
-pub struct WSServer {
+pub struct WSServerListener<H> {
+    listener: TcpListener,
+    handler: Arc<H>,
+}
+
+pub struct IncomingClient<'a, H> {
+    ws_listener: &'a WSServerListener<H>,
+}
+
+pub struct ConnectedClient<H> {
+    pub ws_state: ConnectionStatus,
+    pub ws_stream: WSStream<H>,
+}
+
+impl<H> WSServerListener<H>
+where
+    H: WSHandler,
+{
+    pub fn init(port: u16, handler: H) -> Result<WSServerListener<H>, String>
+    where
+        H: WSHandler,
+    {
+        let conn: TcpListener =
+            match TcpListener::bind(SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), port)) {
+                Ok(s) => s,
+                Err(_) => return Err("Failed bind tcp connection".to_string()),
+            };
+
+        Ok(WSServerListener {
+            listener: conn,
+            handler: Arc::new(handler),
+        })
+    }
+
+    pub fn listen(&self) -> IncomingClient<'_, H> {
+        IncomingClient { ws_listener: self }
+    }
+
+    pub fn accept(&self) -> Result<ConnectedClient<H>, String>
+    where
+        H: WSHandler,
+    {
+        let req = self.listener.accept().map(|c| c.0);
+
+        match req {
+            Ok(stream) => {
+                let mut str_cpy = stream.try_clone().unwrap();
+                let _ = handshake(&mut str_cpy)?;
+                Ok(ConnectedClient {
+                    ws_state: ConnectionStatus::Open,
+                    ws_stream: WSStream {
+                        stream: str_cpy,
+                        handler: self.handler.clone(),
+                    },
+                })
+            }
+            _ => Err("".to_string()),
+        }
+    }
+}
+
+impl<H> Iterator for IncomingClient<'_, H>
+where
+    H: WSHandler,
+{
+    type Item = io::Result<ConnectedClient<H>>;
+
+    fn next(&mut self) -> Option<io::Result<ConnectedClient<H>>> {
+        match self.ws_listener.accept() {
+            Ok(l) => Some(Ok(l)),
+            _ => None,
+        }
+    }
+}
+
+fn handshake(stream: &mut TcpStream) -> Result<(), String> {
+    let mut ws_upgrade = WSUpgrade::new();
+
+    println!("Initiated handshake with client");
+
+    let mut buf = [0u8; 512];
+    let r_size = match stream.read(&mut buf) {
+        Ok(n) => n,
+        Err(e) => {
+            println!("Failed to read handshake: {:?}", e);
+            return Err("Handshake failed".to_string());
+        }
+    };
+
+    if let Err(e) = ws_upgrade.parse_handshake(buf[..r_size].to_vec()) {
+        println!("HttpError {:?}", e);
+        return Err(e.message);
+    };
+
+    let server_handshake = ws_upgrade.create_handshake();
+    if let Err(e) = stream.write_all(&server_handshake) {
+        println!("Failed to write handshake: {:?}", e);
+        return Err("Handshake failed".to_string());
+    };
+
+    Ok(())
+}
+
+pub struct WSUpgrade {
     key: String,
     resource: String,
     host: String,
@@ -19,9 +124,9 @@ pub struct WSServer {
     version: u8,
 }
 
-impl Default for WSServer {
+impl Default for WSUpgrade {
     fn default() -> Self {
-        WSServer {
+        WSUpgrade {
             resource: String::from(""),
             host: String::from(""),
             origin: String::from(""),
@@ -33,14 +138,14 @@ impl Default for WSServer {
     }
 }
 
-impl WSServer {
+impl WSUpgrade {
     pub fn new() -> Self {
-        WSServer {
+        WSUpgrade {
             ..Default::default()
         }
     }
 
-    pub fn parse_client_handshake(&mut self, c_handshake: Vec<u8>) -> Result<(), HTTPError> {
+    pub fn parse_handshake(&mut self, c_handshake: Vec<u8>) -> Result<(), HTTPError> {
         let h_lines: Vec<String> = c_handshake
             .lines()
             .map(|res| res.unwrap())
@@ -74,7 +179,7 @@ impl WSServer {
         Ok(())
     }
 
-    pub fn create_handshake_response(&self) -> Vec<u8> {
+    pub fn create_handshake(&self) -> Vec<u8> {
         let mut res = vec![];
         res.extend_from_slice("HTTP/1.1 101 Switching Protocols\n".as_bytes());
         res.extend_from_slice("Upgrade: websocket\nConnection: Upgrade\n".as_bytes());

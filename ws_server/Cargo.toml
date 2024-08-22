@@ -1,0 +1,10 @@
+[package]
+name = "ws_server"
+version = "0.1.0"
+edition = "2021"
+authors = ["Suranjan <7suranjanpoudel7@gmail.com>"]
+
+
+[dependencies]
+ws_core = { path = "../ws_core" }
+url = "2.5.2"

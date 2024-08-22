@@ -23,6 +23,7 @@ impl FrameType {
     }
 }
 
+#[derive(Copy, Clone, Eq, PartialEq)]
 pub enum Agent {
     Server,
     Client,
@@ -68,48 +69,40 @@ impl From<DataFrame> for Vec<u8> {
 }
 
 impl DataFrame {
-    pub fn new(agent: Agent) -> DataFrame {
-        DataFrame {
-            fin: false,
+    pub fn build(payload: &[u8], f_type: FrameType, agent: Agent) -> Result<Self, String> {
+        validate_payload(payload, f_type)?;
+
+        let mut df = DataFrame {
+            fin: true,
             rsv1: false,
             rsv2: false,
             rsv3: false,
-            op_code: 0,
+            op_code: f_type.op_code(),
             mask: false,
             len_indicator: 0,
             payload_len: vec![],
             mask_key: [0; 4],
             payload: vec![],
             agent,
-        }
-    }
+        };
 
-    pub fn build(&mut self, payload: &str, f_type: FrameType) -> Result<(), String> {
-        validate_payload(payload, f_type)?;
+        df.encode_payload_length(payload.len());
 
-        self.fin = true;
-        self.rsv1 = false;
-        self.rsv2 = false;
-        self.rsv3 = false;
-        self.op_code = f_type.op_code();
-
-        self.encode_payload_length(payload.len());
-
-        match self.agent {
+        match df.agent {
             Agent::Server => {
-                self.mask = false;
-                self.payload.extend_from_slice(payload.as_bytes());
+                df.mask = false;
+                df.payload.extend_from_slice(payload);
             }
             Agent::Client => {
-                self.mask = true;
-                self.mask_key = get_masking_key();
-                payload.as_bytes().iter().enumerate().for_each(|(i, data)| {
-                    self.payload.push(*data ^ self.mask_key[i % 4]);
+                df.mask = true;
+                df.mask_key = get_masking_key();
+                payload.iter().enumerate().for_each(|(i, data)| {
+                    df.payload.push(*data ^ df.mask_key[i % 4]);
                 });
             }
         };
 
-        Ok(())
+        Ok(df)
     }
 
     fn encode_payload_length(&mut self, length: usize) {
@@ -132,7 +125,7 @@ fn get_masking_key() -> [u8; 4] {
     key
 }
 
-fn validate_payload(payload: &str, frame_type: FrameType) -> Result<(), &str> {
+fn validate_payload(payload: &[u8], frame_type: FrameType) -> Result<(), &str> {
     match frame_type {
         FrameType::Continuation | FrameType::Text | FrameType::Binary => Ok(()),
         FrameType::Close | FrameType::Ping | FrameType::Pong => {

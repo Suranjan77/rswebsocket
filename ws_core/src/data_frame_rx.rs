@@ -1,10 +1,4 @@
-use crate::ws_core::data_frame_tx::{Agent, FrameType};
-
-pub trait WSHandler {
-    fn handle_text_msg(&self, msg: String);
-    fn handle_bin_msg(&self, msg: Vec<u8>);
-    fn handle_control(&self, ctrl_msg: String, f_type: FrameType);
-}
+use crate::data_frame_tx::{Agent, FrameType};
 
 impl TryFrom<u8> for FrameType {
     type Error = &'static str;
@@ -24,22 +18,17 @@ impl TryFrom<u8> for FrameType {
 
 /// A parser that can parse dataframe from a buffer of u8 and call the handler with parsed payload
 /// when the handler is implementation of the trait WSHandler
-pub struct DFParser<H> {
-    agent: Agent,
-    handler: H,
+pub struct DFParser {}
+
+pub struct DFPayload {
+    pub data: Vec<u8>,
+    pub f_type: FrameType,
 }
 
-impl<H> DFParser<H>
-where
-    H: WSHandler,
-{
-    pub fn new(agent: Agent, handler: H) -> Self {
-        DFParser { agent, handler }
-    }
-
+impl DFParser {
     /// Caller needs to create new `buffer` of Vec<u8> and read the stream till the *EOF*
     /// into the `buffer`
-    pub fn parse(&self, buf: &[u8]) -> Result<(), String> {
+    pub fn parse(buf: &[u8], agent: Agent) -> Result<DFPayload, String> {
         if buf.len() < 3 {
             return Err("Minimum frame length is 2 bytes".to_string());
         }
@@ -58,16 +47,16 @@ where
         };
 
         if let Some(m_len) = buf.get(1) {
-            match self.agent {
-                Agent::Client => {
+            match agent {
+                Agent::Server => {
                     if m_len & 0x80 != 0x80 {
-                        return Err("Mask bit unset is not allowed for client".to_string());
+                        return Err("Mask bit unset is not allowed for client msg".to_string());
                     }
                     true
                 }
-                Agent::Server => {
+                Agent::Client => {
                     if m_len & 0x80 != 0 {
-                        return Err("Mask bit set is not allowed for server".to_string());
+                        return Err("Mask bit set is not allowed for server nsg".to_string());
                     }
                     false
                 }
@@ -104,37 +93,30 @@ where
                 },
             };
 
-            let payload: Vec<u8> = match self.agent {
-                Agent::Client => match buf.get(mask_idx..mask_idx + 4) {
+            let payload: Vec<u8> = match agent {
+                Agent::Server => match buf.get(mask_idx..mask_idx + 4) {
                     Some(m) => match buf.get(mask_idx + 4..payload_len + mask_idx + 4) {
                         Some(l) => l
                             .iter()
                             .enumerate()
                             .map(|(i, data)| *data ^ m[i % 4])
                             .collect(),
-                        None => return Err("Invalid payload, incomplete payload".to_string()),
+                        None => return Err("Invalid payload from client, incomplete payload".to_string()),
                     },
                     None => return Err("Invalid mask".to_string()),
                 },
-                Agent::Server => match buf.get(mask_idx..payload_len) {
+                Agent::Client => match buf.get(mask_idx..payload_len) {
                     Some(l) => l.to_vec(),
-                    None => return Err("Invalid payload, incomplete payload".to_string()),
+                    None => return Err("Invalid payload from server, incomplete payload".to_string()),
                 },
             };
 
-            match f_type {
-                FrameType::Continuation | FrameType::Text => self
-                    .handler
-                    .handle_text_msg(String::from_utf8(payload).unwrap()),
-                FrameType::Binary => self.handler.handle_bin_msg(payload),
-                FrameType::Close | FrameType::Ping | FrameType::Pong => self
-                    .handler
-                    .handle_control(String::from_utf8(payload).unwrap(), f_type),
-            }
+            Ok(DFPayload {
+                data: payload,
+                f_type,
+            })
         } else {
             return Err("Invalid dataframe, missing payload length".to_string());
         }
-
-        Ok(())
     }
 }
